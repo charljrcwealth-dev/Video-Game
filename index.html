@@ -97,7 +97,7 @@ button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 /* sight pictures */
 #irons,#scope{position:fixed;inset:0;pointer-events:none;z-index:4;opacity:0}
 #irons .ap{position:absolute;left:50%;top:50%;width:78vmin;height:78vmin;margin:-39vmin 0 0 -39vmin;border-radius:50%;
-  background:radial-gradient(circle,transparent 0 34%,rgba(14,12,10,.35) 40%,rgba(14,12,10,.93) 49%,rgba(14,12,10,.93) 58%,rgba(14,12,10,.4) 66%,transparent 72%)}
+  background:radial-gradient(circle,transparent 0 41%,rgba(14,12,10,.3) 46%,rgba(14,12,10,.9) 53%,rgba(14,12,10,.9) 59%,rgba(14,12,10,.35) 65%,transparent 70%)}
 #irons .rx{position:absolute;left:50%;bottom:-2vmin;width:34vmin;height:30vmin;margin-left:-17vmin;background:#14110e;
   clip-path:polygon(18% 100%,30% 22%,42% 0,58% 0,70% 22%,82% 100%);filter:blur(1.5px)}
 #irons .post{position:absolute;left:50%;top:50%;width:5px;height:11vmin;margin-left:-2.5px;background:#0c0a08;box-shadow:0 -1px 0 rgba(255,230,190,.55)}
@@ -228,6 +228,7 @@ button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
       <button class="mi" id="sensBtn">Look speed <small id="sensVal">Normal</small></button>
       <button class="mi" id="goreBtn">Blood <small id="goreVal">On</small></button>
       <button class="mi" id="soundBtn">Sound <small id="soundVal">On</small></button>
+      <button class="mi" id="gfxBtn">Graphics <small id="gfxVal">High</small></button>
     </div>
     <div class="best" id="bestTxt"></div>
     <ul class="help" id="helpTxt"></ul>
@@ -281,7 +282,7 @@ const tmpV = V(), tmpV2 = V();
 
 // ================= save =================
 const SAVE_KEY = 'valmont1944-fps-v1';
-let save = { adult: false, gore: true, sound: true, diff: 'regular', sens: 1, bestWave: 0, bestScore: 0 };
+let save = { adult: false, gore: true, sound: true, diff: 'regular', sens: 1, bestWave: 0, bestScore: 0, gfx: 'high' };
 try { const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (s) save = Object.assign(save, s); } catch (e) { }
 function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { } }
 const DIFFS = { recruit: { acc: 0.55, dmg: 0.6, assist: 1, label: 'Recruit' }, regular: { acc: 1, dmg: 1, assist: 0.6, label: 'Regular' }, veteran: { acc: 1.45, dmg: 1.5, assist: 0, label: 'Veteran' } };
@@ -340,20 +341,31 @@ function buzz(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e
 
 // ================= renderer =================
 const canvas = $('game');
-const renderer = new T.WebGLRenderer({ canvas, antialias: !isTouch, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isTouch ? 1.5 : 2));
+const renderer = new T.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+const hiDPR = () => save.gfx === 'low' ? 1 : Math.min(window.devicePixelRatio || 1, isTouch ? 1.6 : 2);
+renderer.setPixelRatio(hiDPR());
+renderer.shadowMap.enabled = save.gfx !== 'low'; renderer.shadowMap.type = isTouch ? T.PCFShadowMap : T.PCFSoftShadowMap;
 renderer.autoClear = false;
 const scene = new T.Scene();
 const FOG = 0xa47f62;
-scene.fog = new T.FogExp2(FOG, 0.0115);
+scene.fog = new T.FogExp2(FOG, 0.0068);
 const camera = new T.PerspectiveCamera(75, 1, 0.05, 600);
 camera.rotation.order = 'YXZ';
 const vmScene = new T.Scene();
 const vmCam = new T.PerspectiveCamera(58, 1, 0.01, 10);
 
 // lights
-const hemi = new T.HemisphereLight(0xe0b088, 0x3a3027, 0.78); scene.add(hemi);
-const sun = new T.DirectionalLight(0xffb27a, 0.95); sun.position.set(25, 22, -90); scene.add(sun);
+const hemi = new T.HemisphereLight(0xdcb48e, 0x3a3027, 0.62); scene.add(hemi);
+const sun = new T.DirectionalLight(0xffc08a, 1.2); scene.add(sun); scene.add(sun.target);
+const SUN_OFF = V(-16, 40, 42);
+sun.castShadow = true; sun.shadow.mapSize.set(isTouch ? 1536 : 2048, isTouch ? 1536 : 2048);
+Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30, near: 1, far: 160 });
+sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.03;
+const frontFill = new T.DirectionalLight(0x9fb4d0, 0.4); frontFill.position.set(10, 8, 60); scene.add(frontFill);
+function updateSun() {
+  const c = camera.position, fx = -Math.sin(camera.rotation.y) * 18, fz = -Math.cos(camera.rotation.y) * 18;
+  sun.target.position.set(Math.round(c.x + fx), 0, Math.round(c.z + fz)); sun.position.copy(sun.target.position).add(SUN_OFF);
+}
 const fireLight = new T.PointLight(0xff7a2a, 1.2, 26, 2); fireLight.position.set(-8, 4, -47); scene.add(fireLight);
 const flashLight = new T.PointLight(0xffc07a, 0, 12, 2); scene.add(flashLight);
 const boomLight = new T.PointLight(0xff9a4a, 0, 40, 2); scene.add(boomLight);
@@ -364,7 +376,7 @@ const vmFlash = new T.PointLight(0xffb060, 0, 2, 2); vmFlash.position.set(0.1, -
 // sky
 const skyMat = new T.ShaderMaterial({
   side: T.BackSide, depthWrite: false, fog: false,
-  uniforms: { top: { value: new T.Color(0x29324c) }, hor: { value: new T.Color(0xd39066) }, bot: { value: new T.Color(0x3a2e25) }, sunDir: { value: V(0.22, 0.08, -0.97).normalize() }, sunCol: { value: new T.Color(0xffd29a) } },
+  uniforms: { top: { value: new T.Color(0x29324c) }, hor: { value: new T.Color(0xd39066) }, bot: { value: new T.Color(0x3a2e25) }, sunDir: { value: V(-16, 40, 42).normalize() }, sunCol: { value: new T.Color(0xffd29a) } },
   vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
   fragmentShader: 'uniform vec3 top,hor,bot,sunCol; uniform vec3 sunDir; varying vec3 vP; void main(){ float h=vP.y; vec3 c = h>0.0 ? mix(hor, top, pow(h,0.5)) : mix(hor, bot, pow(-h,0.35)); float s=max(dot(vP,sunDir),0.0); c += sunCol*(pow(s,900.0)*1.6 + pow(s,14.0)*0.35 + pow(s,3.0)*0.08); gl_FragColor=vec4(c,1.0); }',
 });
@@ -375,8 +387,8 @@ function ctex(size, draw, opts = {}) {
   const c = document.createElement('canvas'); c.width = c.height = size; const g = c.getContext('2d'); draw(g, size);
   const t = new T.CanvasTexture(c); t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 4; return t;
 }
-function noise(g, n, amt) {
-  const d = g.getImageData(0, 0, n, n), a = d.data;
+function noise(g, n, amt, h = n) {
+  const d = g.getImageData(0, 0, n, h), a = d.data;
   for (let i = 0; i < a.length; i += 4) { const v = (Math.random() - 0.5) * amt * 255; a[i] += v; a[i + 1] += v; a[i + 2] += v; }
   g.putImageData(d, 0, 0);
 }
@@ -456,7 +468,7 @@ function buildBatches() {
     const bg = new T.BufferGeometry();
     bg.setAttribute('position', new T.BufferAttribute(pos, 3)); bg.setAttribute('normal', new T.BufferAttribute(nor, 3)); bg.setAttribute('uv', new T.BufferAttribute(uv, 2));
     bg.setIndex(new T.BufferAttribute(idx, 1)); bg.computeBoundingSphere();
-    scene.add(new T.Mesh(bg, MAT[key]));
+    const mesh = new T.Mesh(bg, MAT[key]); mesh.receiveShadow = true; mesh.castShadow = !['cobble', 'crater', 'win', 'winGlow', 'door'].includes(key); scene.add(mesh);
   }
   batches.clear();
 }
@@ -692,50 +704,116 @@ function tracer(a, b, col = 0xffd9a0) {
 }
 
 // ================= soldiers =================
-const EG = {
-  thigh: (() => { const g = boxGeo(0.17, 0.86, 0.19, 1); g.translate(0, -0.43, 0); return g; })(),
-  boot: boxGeo(0.18, 0.13, 0.3, 1),
-  torso: boxGeo(0.48, 0.62, 0.27, 1), belt: boxGeo(0.5, 0.07, 0.29, 1), pack: boxGeo(0.36, 0.42, 0.15, 1), pouch: boxGeo(0.12, 0.1, 0.06, 1),
-  arm: (() => { const g = boxGeo(0.13, 0.55, 0.13, 1); g.translate(0, -0.27, 0); return g; })(),
-  head: new T.SphereGeometry(0.115, 10, 8), helmet: new T.SphereGeometry(0.155, 12, 6, 0, TAU, 0, Math.PI * 0.5),
-  skirt: new T.CylinderGeometry(0.165, 0.2, 0.07, 12, 1, true),
-  stock: boxGeo(0.06, 0.09, 0.75, 1), barrel: (() => { const g = new T.CylinderGeometry(0.014, 0.014, 0.5, 6); g.rotateX(Math.PI / 2); return g; })(),
-};
-const EM = {
-  uni: L({ color: 0x5c6350 }), uniDark: L({ color: 0x484d40 }), skin: L({ color: 0xc0957a }), helm: L({ color: 0x4c5242 }),
-  boot: L({ color: 0x25211c }), wood: L({ color: 0x5a3f2a }), metal: L({ color: 0x2a2a28 }), belt: L({ color: 0x2c2a24 }), pack: L({ color: 0x6a634e }),
-};
+function wool(g, n, base, amt) { g.fillStyle = base; g.fillRect(0, 0, n, n); noise(g, n, amt || 0.13); }
+function faceTex(skin, hair, beard) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 128; const g = c.getContext('2d');
+  g.fillStyle = skin; g.fillRect(0, 0, 256, 128); noise(g, 256, 0.05, 128);
+  const sh = (x, y, rx, ry, col) => { const r = Math.max(rx, ry), rg = g.createRadialGradient(x, y, 0, x, y, r); rg.addColorStop(0, col); rg.addColorStop(1, 'rgba(0,0,0,0)'); g.save(); g.translate(x, y); g.scale(rx / r, ry / r); g.translate(-x, -y); g.fillStyle = rg; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); g.restore(); };
+  g.fillStyle = hair; g.fillRect(140, 0, 116, 56); g.fillRect(0, 0, 256, 24);
+  sh(53, 60, 12, 8, 'rgba(70,35,22,.38)'); sh(75, 60, 12, 8, 'rgba(70,35,22,.38)');
+  g.strokeStyle = hair; g.lineWidth = 3.4; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(44, 52); g.quadraticCurveTo(53, 48, 61, 52); g.moveTo(67, 52); g.quadraticCurveTo(75, 48, 84, 52); g.stroke();
+  for (const ex of [53, 75]) {
+    g.fillStyle = '#e9e1d3'; g.beginPath(); g.ellipse(ex, 59, 5.6, 2.7, 0, 0, TAU); g.fill();
+    g.fillStyle = '#4a3624'; g.beginPath(); g.arc(ex, 59, 2.2, 0, TAU); g.fill();
+    g.fillStyle = '#0c0806'; g.beginPath(); g.arc(ex, 59, 1.1, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(40,20,12,.85)'; g.lineWidth = 1.5; g.beginPath(); g.ellipse(ex, 58.6, 5.9, 2.9, 0, Math.PI, TAU); g.stroke();
+  }
+  sh(64, 70, 5, 11, 'rgba(95,48,32,.3)'); g.fillStyle = 'rgba(255,232,212,.28)'; g.fillRect(63, 60, 2, 12);
+  g.fillStyle = 'rgba(55,22,14,.65)'; g.beginPath(); g.arc(61, 76, 1.5, 0, TAU); g.arc(67, 76, 1.5, 0, TAU); g.fill();
+  g.strokeStyle = 'rgba(95,38,30,.9)'; g.lineWidth = 2.2; g.beginPath(); g.moveTo(55, 86); g.quadraticCurveTo(64, 88.5, 73, 86); g.stroke();
+  g.fillStyle = 'rgba(150,80,70,.35)'; g.fillRect(58, 88, 12, 3);
+  sh(64, 95, 27, 13, `rgba(40,30,22,${beard})`);
+  sh(45, 73, 8, 6, 'rgba(190,90,70,.16)'); sh(83, 73, 8, 6, 'rgba(190,90,70,.16)');
+  sh(5, 62, 6, 10, 'rgba(120,60,45,.5)'); sh(123, 62, 6, 10, 'rgba(120,60,45,.5)');
+  g.strokeStyle = '#2a2318'; g.lineWidth = 3; g.beginPath(); g.moveTo(9, 64); g.quadraticCurveTo(30, 112, 64, 107); g.quadraticCurveTo(98, 112, 119, 64); g.stroke();
+  return new T.CanvasTexture(c);
+}
+const SOLDIER = (() => {
+  const lam = o => new T.MeshLambertMaterial(Object.assign({ emissive: 0x0d0b09 }, o));
+  const jacket = ctex(256, (g, n) => {
+    wool(g, n, '#6b735c');
+    g.fillStyle = '#434c3a'; g.fillRect(0, 0, n, 24);
+    g.fillStyle = 'rgba(0,0,0,.28)'; g.fillRect(126, 24, 3, n);
+    g.fillStyle = '#c2bca2'; for (let i = 0; i < 5; i++) { g.beginPath(); g.arc(132, 42 + i * 42, 4, 0, TAU); g.fill(); }
+    for (const px of [96, 162]) { g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(px - 18, 60, 36, 44); g.fillStyle = '#5c6550'; g.fillRect(px - 20, 56, 40, 14); g.fillStyle = '#c2bca2'; g.beginPath(); g.arc(px, 64, 3, 0, TAU); g.fill(); }
+    for (const px of [90, 168]) { g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(px - 22, 168, 44, 58); g.fillStyle = '#5c6550'; g.fillRect(px - 24, 164, 48, 14); }
+    g.strokeStyle = '#2b261f'; g.lineWidth = 8;
+    g.beginPath(); g.moveTo(98, 24); g.lineTo(106, n); g.moveTo(158, 24); g.lineTo(150, n); g.moveTo(30, 24); g.lineTo(6, 120); g.moveTo(226, 24); g.lineTo(250, 120); g.stroke();
+    g.fillStyle = '#2b261f'; g.fillRect(0, 118, 8, n); g.fillRect(248, 118, 8, n);
+    g.fillStyle = '#34402f'; g.fillRect(110, 5, 12, 15); g.fillRect(134, 5, 12, 15);
+    g.fillStyle = '#9a9a8a'; g.fillRect(113, 9, 6, 2); g.fillRect(137, 9, 6, 2);
+  });
+  const M = {
+    jacket: lam({ map: jacket }), trousers: lam({ map: ctex(128, (g, n) => wool(g, n, '#5e6452')) }),
+    sleeve: lam({ map: ctex(128, (g, n) => { wool(g, n, '#6b735c'); g.fillStyle = '#434c3a'; g.fillRect(0, n - 12, n, 12); }) }),
+    boot: lam({ color: 0x1f1b17 }), leather: lam({ color: 0x2c251d }), helm: lam({ map: ctex(64, (g, n) => wool(g, n, '#58604c', 0.1)), side: T.DoubleSide }),
+    skin: lam({ color: 0xc8987a }), wood: lam({ color: 0x6e4c30 }), metal: lam({ color: 0x272725 }), canister: lam({ color: 0x5b6450 }),
+    bag: lam({ color: 0x726e55 }), buckle: lam({ color: 0x8e8d84 }),
+    faces: [faceTex('#d4a286', '#3a2a1c', 0.18), faceTex('#c69276', '#5a4128', 0.26), faceTex('#ba8869', '#1e1814', 0.3), faceTex('#dab094', '#7a5a34', 0.12)].map(t => lam({ map: t })),
+  };
+  const tr = (g, x, y, z) => { g.translate(x, y, z); return g; };
+  const Gm = {
+    thigh: tr(new T.CylinderGeometry(0.088, 0.072, 0.52, 10), 0, -0.26, 0),
+    boot: tr(new T.CylinderGeometry(0.075, 0.07, 0.36, 10), 0, -0.68, 0),
+    foot: tr(new T.BoxGeometry(0.095, 0.07, 0.24), 0, -0.83, 0.055),
+    torso: (() => { const g = new T.CylinderGeometry(0.2, 0.175, 0.62, 16, 1, false, Math.PI); g.scale(1, 1, 0.64); return tr(g, 0, 0.31, 0); })(),
+    shoulder: new T.SphereGeometry(0.085, 10, 8),
+    neck: tr(new T.CylinderGeometry(0.05, 0.056, 0.12, 8), 0, 0.67, 0),
+    belt: (() => { const g = new T.CylinderGeometry(0.183, 0.183, 0.06, 16); g.scale(1, 1, 0.66); return tr(g, 0, 0.04, 0); })(),
+    buckle: new T.BoxGeometry(0.055, 0.045, 0.02), pouch: new T.BoxGeometry(0.045, 0.075, 0.045),
+    upperArm: tr(new T.CylinderGeometry(0.062, 0.055, 0.3, 8), 0, -0.15, 0),
+    foreArm: tr(new T.CylinderGeometry(0.055, 0.046, 0.27, 8), 0, -0.43, 0),
+    hand: (() => { const g = new T.SphereGeometry(0.048, 8, 6); g.scale(0.9, 1.2, 0.8); return tr(g, 0, -0.6, 0); })(),
+    head: (() => { const g = new T.SphereGeometry(0.11, 22, 16); g.scale(0.95, 1.12, 1.03); return g; })(),
+    nose: tr(new T.BoxGeometry(0.024, 0.045, 0.03), 0, -0.012, 0.112),
+    helmet: new T.LatheGeometry([[0.001, 0.165], [0.06, 0.158], [0.105, 0.135], [0.135, 0.1], [0.148, 0.06], [0.152, 0.02], [0.157, -0.01], [0.186, -0.045], [0.196, -0.06]].map(p => new T.Vector2(p[0], p[1])), 24),
+    canister: new T.CylinderGeometry(0.055, 0.055, 0.27, 12), canteen: (() => { const g = new T.CylinderGeometry(0.05, 0.05, 0.16, 10); g.scale(1, 1, 0.6); return g; })(),
+    bag: new T.BoxGeometry(0.06, 0.15, 0.17),
+    stock: new T.BoxGeometry(0.045, 0.065, 0.72), butt: new T.BoxGeometry(0.042, 0.12, 0.26),
+    barrel: (() => { const g = new T.CylinderGeometry(0.012, 0.013, 0.45, 6); g.rotateX(Math.PI / 2); return g; })(),
+    bolt: new T.BoxGeometry(0.07, 0.015, 0.015), smg: new T.BoxGeometry(0.04, 0.06, 0.42), smgMag: new T.BoxGeometry(0.03, 0.2, 0.04),
+  };
+  Gm.shadowSet = new Set([Gm.torso, Gm.thigh, Gm.boot, Gm.helmet, Gm.upperArm, Gm.head]);
+  return { M, Gm };
+})();
 const enemies = [];
 function makeSoldier(type) {
+  const { M, Gm } = SOLDIER;
+  const mesh = (g, m, x = 0, y = 0, z = 0) => { const me = new T.Mesh(g, m); me.position.set(x, y, z); return me; };
   const root = new T.Group();
-  const legL = new T.Mesh(EG.thigh, EM.uniDark), legR = new T.Mesh(EG.thigh, EM.uniDark);
+  const legL = new T.Group(), legR = new T.Group();
   legL.position.set(-0.1, 0.86, 0); legR.position.set(0.1, 0.86, 0);
-  for (const l of [legL, legR]) { const b = new T.Mesh(EG.boot, EM.boot); b.position.set(0, -0.8, 0.05); l.add(b); root.add(l); }
+  for (const l of [legL, legR]) { l.add(mesh(Gm.thigh, M.trousers), mesh(Gm.boot, M.boot), mesh(Gm.foot, M.boot)); root.add(l); }
   const upper = new T.Group(); upper.position.y = 0.86; root.add(upper);
-  const torso = new T.Mesh(EG.torso, EM.uni); torso.position.y = 0.31; upper.add(torso);
-  const belt = new T.Mesh(EG.belt, EM.belt); belt.position.y = 0.04; upper.add(belt);
-  for (const x of [-0.15, 0.15]) { const p = new T.Mesh(EG.pouch, EM.belt); p.position.set(x, 0.1, 0.16); upper.add(p); }
-  const pack = new T.Mesh(EG.pack, EM.pack); pack.position.set(0, 0.36, -0.21); upper.add(pack);
-  const head = new T.Group(); head.position.y = 0.74; upper.add(head);
-  head.add(new T.Mesh(EG.head, EM.skin));
-  const helmet = new T.Group(); helmet.position.y = 0.03;
-  const dome = new T.Mesh(EG.helmet, EM.helm); const skirt = new T.Mesh(EG.skirt, EM.helm); skirt.position.y = -0.01; helmet.add(dome, skirt); head.add(helmet);
-  const armL = new T.Mesh(EG.arm, EM.uni), armR = new T.Mesh(EG.arm, EM.uni);
-  armL.position.set(-0.29, 0.56, 0); armR.position.set(0.29, 0.56, 0);
-  armL.rotation.set(-1.25, 0, 0.35); armR.rotation.set(-1.0, 0, -0.2); upper.add(armL, armR);
+  upper.add(mesh(Gm.torso, M.jacket), mesh(Gm.belt, M.leather), mesh(Gm.neck, M.skin), mesh(Gm.buckle, M.buckle, 0, 0.04, 0.122));
+  for (const sx of [-1, 1]) {
+    upper.add(mesh(Gm.shoulder, M.sleeve, sx * 0.19, 0.56, 0));
+    for (let i = 0; i < 3; i++) upper.add(mesh(Gm.pouch, M.leather, sx * (0.045 + i * 0.047), 0.09, 0.115 - i * 0.012));
+  }
+  const can = mesh(Gm.canister, M.canister, 0.06, 0.16, -0.15); can.rotation.z = 0.15; upper.add(can);
+  upper.add(mesh(Gm.bag, M.bag, 0.17, -0.03, -0.05), mesh(Gm.canteen, M.bag, -0.15, -0.02, -0.1));
+  const head = new T.Group(); head.position.y = 0.79; upper.add(head);
+  head.add(mesh(Gm.head, pick(M.faces)), mesh(Gm.nose, M.skin));
+  const helmet = new T.Group(); helmet.position.y = 0.085; helmet.add(mesh(Gm.helmet, M.helm)); head.add(helmet);
+  const mkArm = x => { const a = new T.Group(); a.position.set(x, 0.56, 0); a.add(mesh(Gm.upperArm, M.sleeve), mesh(Gm.foreArm, M.sleeve), mesh(Gm.hand, M.skin)); upper.add(a); return a; };
+  const armL = mkArm(-0.22), armR = mkArm(0.22);
+  armL.rotation.set(-1.25, 0, 0.35); armR.rotation.set(-1.0, 0, -0.2);
   const gun = new T.Group(); gun.position.set(0.04, 0.42, 0.28); upper.add(gun);
-  const stock = new T.Mesh(EG.stock, EM.wood); stock.position.z = type === 'assault' ? 0.05 : 0.12; if (type === 'assault') stock.scale.z = 0.7; gun.add(stock);
-  const barrel = new T.Mesh(EG.barrel, EM.metal); barrel.position.set(0, 0.02, type === 'assault' ? 0.5 : 0.68); gun.add(barrel);
+  let muzZ;
+  if (type === 'assault') { gun.add(mesh(Gm.smg, M.metal, 0, 0, 0.18), mesh(Gm.smgMag, M.metal, 0, -0.12, 0.12)); muzZ = 0.42; }
+  else { gun.add(mesh(Gm.stock, M.wood, 0, -0.01, 0.2), mesh(Gm.butt, M.wood, 0, -0.04, -0.2), mesh(Gm.barrel, M.metal, 0, 0.015, 0.68), mesh(Gm.bolt, M.metal, 0.04, 0.03, 0.05)); muzZ = 0.92; }
   const muzzle = new T.Sprite(new T.SpriteMaterial({ map: TEX.star, color: 0xffc070, transparent: true, depthWrite: false, blending: T.AdditiveBlending }));
-  muzzle.position.set(0, 0.02, type === 'assault' ? 0.78 : 0.96); muzzle.scale.setScalar(0.6); muzzle.visible = false; gun.add(muzzle);
+  muzzle.position.set(0, 0.015, muzZ); muzzle.scale.setScalar(0.6); muzzle.visible = false; gun.add(muzzle);
+  root.traverse(o => { if (o.isMesh) { o.castShadow = Gm.shadowSet.has(o.geometry); o.receiveShadow = true; } });
   scene.add(root);
   return { root, legL, legR, upper, head, helmet, armL, armR, gun, muzzle };
 }
 
 // ================= player & weapons =================
 const WEAPONS = [
-  { id: 'garand', name: 'M1 Garand', mag: 8, reserveMax: 96, rate: 0.17, auto: false, dmg: { head: 250, body: 80, legs: 55 }, spread: { hip: 0.018, ads: 0.0012, move: 0.025 }, kick: 0.032, reload: 2.1, fovAds: 44, range: 200, sight: 'irons' },
-  { id: 'thompson', name: 'M1A1 Thompson', mag: 30, reserveMax: 180, rate: 0.085, auto: true, dmg: { head: 95, body: 32, legs: 24 }, spread: { hip: 0.03, ads: 0.007, move: 0.03 }, kick: 0.011, reload: 2.5, fovAds: 55, range: 90, sight: 'irons' },
+  { id: 'garand', name: 'M1 Garand', mag: 8, reserveMax: 96, rate: 0.17, auto: false, dmg: { head: 250, body: 80, legs: 55 }, spread: { hip: 0.018, ads: 0.0012, move: 0.025 }, kick: 0.032, reload: 2.1, fovAds: 34, range: 200, sight: 'irons' },
+  { id: 'thompson', name: 'M1A1 Thompson', mag: 30, reserveMax: 180, rate: 0.085, auto: true, dmg: { head: 95, body: 32, legs: 24 }, spread: { hip: 0.03, ads: 0.007, move: 0.03 }, kick: 0.011, reload: 2.5, fovAds: 48, range: 90, sight: 'irons' },
   { id: 'springfield', name: 'M1903A4 Sniper', mag: 5, reserveMax: 40, rate: 1.25, auto: false, dmg: { head: 400, body: 160, legs: 110 }, spread: { hip: 0.05, ads: 0.0002, move: 0.04 }, kick: 0.05, reload: 3.0, fovAds: 13, range: 300, sight: 'scope' },
 ];
 let P, G, mode = 'menu';
@@ -966,10 +1044,10 @@ function fire() {
   for (const e of enemies) {
     if (!e.alive) continue;
     const c = e.crouch, base = e.pos.y;
-    const hc = tmpV.set(e.pos.x, base + 1.6 - c * 0.42, e.pos.z);
-    const th = raySphere(shotO, shotDir, hc, 0.16);
+    const hc = tmpV.set(e.pos.x, base + 1.65 - c * 0.42, e.pos.z);
+    const th = raySphere(shotO, shotDir, hc, 0.15);
     if (th > 0 && th < bestT) { bestT = th; hitE = e; zone = 'head'; continue; }
-    const box = { min: [e.pos.x - 0.27, base, e.pos.z - 0.27], max: [e.pos.x + 0.27, base + 1.47 - c * 0.42, e.pos.z + 0.27] };
+    const box = { min: [e.pos.x - 0.27, base, e.pos.z - 0.27], max: [e.pos.x + 0.27, base + 1.5 - c * 0.42, e.pos.z + 0.27] };
     const tb = rayBox(shotO, shotDir, box, bestT);
     if (tb >= 0 && tb < bestT) { bestT = tb; hitE = e; const hy = shotO.y + shotDir.y * tb - base; zone = hy < 0.8 - c * 0.3 ? 'legs' : 'body'; }
   }
@@ -1477,6 +1555,7 @@ function buildMenu() {
   $('sensVal').textContent = (SENS.find(s => s[0] === save.sens) || SENS[1])[1];
   $('goreVal').textContent = save.gore ? 'On' : 'Off';
   $('soundVal').textContent = save.sound ? 'On' : 'Off';
+  $('gfxVal').textContent = save.gfx === 'low' ? 'Low (faster)' : 'High';
   $('bestTxt').textContent = save.bestWave ? `Best: wave ${save.bestWave} · ${save.bestScore} points` : '';
   $('helpTxt').innerHTML = isTouch
     ? '<li>Left thumb: move. Push to the top edge to sprint.</li><li>Right thumb: look. Drag from Fire to aim while shooting.</li><li>Aim to look down the sights. Swap to the sniper rifle for a full scope; hold Hold breath to steady it.</li><li>Aim snaps toward nearby enemies. Health comes back if you stay out of fire.</li><li>Six kills in a row earns an artillery strike.</li>'
@@ -1488,6 +1567,12 @@ $('diffBtn').addEventListener('click', () => { const k = Object.keys(DIFFS); sav
 $('sensBtn').addEventListener('click', () => { const i = SENS.findIndex(s => s[0] === save.sens); save.sens = SENS[(i + 1) % SENS.length][0]; persist(); buildMenu(); });
 $('goreBtn').addEventListener('click', () => { save.gore = !save.gore; persist(); buildMenu(); });
 $('soundBtn').addEventListener('click', () => { initAudio(); save.sound = !save.sound; if (master) master.gain.value = save.sound ? 0.8 : 0; persist(); buildMenu(); });
+$('gfxBtn').addEventListener('click', () => {
+  save.gfx = save.gfx === 'low' ? 'high' : 'low'; persist();
+  renderer.shadowMap.enabled = save.gfx !== 'low'; renderer.setPixelRatio(hiDPR()); resize();
+  scene.traverse(o => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.needsUpdate = true); });
+  buildMenu();
+});
 $('playBtn').addEventListener('click', deploy);
 $('againBtn').addEventListener('click', deploy);
 $('restartBtn').addEventListener('click', deploy);
@@ -1541,7 +1626,7 @@ function frame(now) {
       if (camera.fov !== 70) { camera.fov = 70; camera.updateProjectionMatrix(); }
     }
     if (mode !== 'pause') { updateEnv(dt); updateParticles(dt); }
-    sky.position.copy(camera.position);
+    sky.position.copy(camera.position); updateSun();
     renderer.clear(); renderer.render(scene, camera);
     if ((mode === 'play' || mode === 'pause') && P && !P.dead) { renderer.clearDepth(); renderer.render(vmScene, vmCam); }
   } catch (err) { console.error(err); }
