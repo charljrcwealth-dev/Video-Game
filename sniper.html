@@ -1,0 +1,1885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0f1210">
+<!--GAME-START-->
+<title>Valmont 1944</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Stencil+Display:wght@700;900&family=Special+Elite&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: full-screen canvas battlefield; HUD plates pinned to the corners; paper field-order dossiers as overlays. Single dark look by design. */
+:root{
+  --night:#0f1210;      /* page ground */
+  --ink:#ece3cc;        /* HUD text */
+  --paper:#d8caa4;      /* dossier paper */
+  --paper-ink:#2a2419;  /* typed text */
+  --brass:#c99a4a;      /* rounds, fire ring */
+  --rust:#a4472a;       /* stamps, danger */
+  --olive:#5a6142;      /* accents */
+  --plate:rgba(12,14,11,.62);
+  --line:rgba(236,227,204,.2);
+  --f-display:'Big Shoulders Stencil Display',Impact,'Arial Narrow',sans-serif;
+  --f-type:'Special Elite','Courier New',Courier,monospace;
+  --f-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{height:100%;margin:0;background:var(--night);color:var(--ink);overflow:hidden;overscroll-behavior:none;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+body{font-family:var(--f-mono);font-size:14px}
+canvas#game{position:fixed;inset:0;display:block;touch-action:none;background:var(--night)}
+[hidden]{display:none!important}
+button{font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+
+/* ---------- HUD ---------- */
+#hud{position:fixed;inset:0;pointer-events:none;z-index:5}
+.hud-top{position:absolute;top:calc(env(safe-area-inset-top,0px) + 8px);
+  left:calc(env(safe-area-inset-left,0px) + 10px);right:calc(env(safe-area-inset-right,0px) + 10px);
+  display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.plate{background:var(--plate);border:1px solid var(--line);border-radius:3px;padding:6px 9px;
+  font-size:12px;letter-spacing:.04em;line-height:1.35;font-variant-numeric:tabular-nums}
+.lbl{display:block;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;opacity:.62}
+.hp-bar{width:110px;height:7px;background:rgba(236,227,204,.14);margin-top:3px;position:relative}
+.hp-bar i{position:absolute;inset:0 auto 0 0;background:#a7b07a;width:100%;transition:width .25s}
+.hp-bar i.low{background:var(--rust)}
+.ammo{display:flex;gap:3px;margin-top:6px;align-items:flex-end;height:20px}
+.round{width:5px;height:19px;border-radius:3px 3px 1px 1px;background:linear-gradient(180deg,#e4c27a 0 35%,var(--brass) 35% 100%)}
+.round.spent{background:rgba(236,227,204,.15)}
+.ammo small{font-size:10px;margin-left:6px;opacity:.75;letter-spacing:.1em;text-transform:uppercase}
+.hud-c{text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px}
+#obj{font-family:var(--f-type);font-size:13px}
+#clock{font-size:16px;font-weight:600}
+#clock.hot{color:#f08a5d}
+.hud-r{display:flex;gap:6px;align-items:flex-start}
+#windArrow{display:inline-block;transition:transform .4s}
+#pauseBtn{pointer-events:auto;width:38px;height:38px;padding:0;font-weight:600;background:var(--plate);border:1px solid var(--line);border-radius:3px;color:var(--ink)}
+
+#readout{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 12px);
+  text-align:center;white-space:nowrap}
+#toast{position:absolute;left:50%;top:calc(env(safe-area-inset-top,0px) + 92px);transform:translateX(-50%);
+  font-family:var(--f-type);font-size:14px;text-align:center;padding:6px 12px;background:rgba(20,16,10,.72);
+  border-left:3px solid var(--brass);max-width:80vw;opacity:0;transition:opacity .3s}
+#toast.show{opacity:1}
+#toast.bad{border-left-color:var(--rust)}
+
+.ctrl{position:absolute;right:calc(env(safe-area-inset-right,0px) + 16px);bottom:calc(env(safe-area-inset-bottom,0px) + 16px);
+  display:grid;grid-template-columns:auto auto;grid-template-rows:auto auto;gap:10px;align-items:end;justify-items:center}
+.cbtn{pointer-events:auto;touch-action:none;border-radius:50%;border:2px solid rgba(236,227,204,.35);
+  background:rgba(12,14,11,.55);color:var(--ink);font-family:var(--f-display);font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+#scopeBtn{width:64px;height:64px;font-size:14px;grid-column:2;grid-row:1}
+#scopeBtn.on{background:rgba(201,154,74,.35);border-color:var(--brass)}
+#reloadBtn{width:54px;height:54px;font-size:11px;grid-column:1;grid-row:2;align-self:end}
+#fireBtn{width:96px;height:96px;font-size:20px;grid-column:2;grid-row:2;position:relative;
+  border-color:var(--brass);background:radial-gradient(circle,rgba(164,71,42,.55) 0 55%,rgba(12,14,11,.6) 56%)}
+#fireBtn::after{content:"";position:absolute;inset:-7px;border-radius:50%;
+  background:conic-gradient(var(--brass) calc(var(--breath,1)*360deg),rgba(236,227,204,.12) 0);
+  -webkit-mask:radial-gradient(circle,transparent 0 calc(50% - 4px),#000 calc(50% - 3px));
+          mask:radial-gradient(circle,transparent 0 calc(50% - 4px),#000 calc(50% - 3px))}
+#fireBtn.held{background:radial-gradient(circle,rgba(201,154,74,.6) 0 55%,rgba(12,14,11,.6) 56%)}
+#fireBtn.cycling{opacity:.55}
+.expo{margin-top:5px;font-size:10px;letter-spacing:.12em;text-transform:uppercase}
+.expo.ok{color:#a7b07a}.expo.mid{color:#e0b35a}.expo.hot{color:#f07a55}.expo.c{color:#9fb3c8}
+.cover-wrap{position:absolute;left:calc(env(safe-area-inset-left,0px) + 16px);bottom:calc(env(safe-area-inset-bottom,0px) + 16px)}
+#coverBtn{width:64px;height:64px;font-size:13px}
+#coverBtn.on{background:rgba(120,150,180,.35);border-color:#9fb3c8}
+.hud-top,.ctrl,.cover-wrap,#readout{transition:opacity .2s}
+#hud.kc .hud-top,#hud.kc .ctrl,#hud.kc .cover-wrap,#hud.kc #readout,#hud.kc .breath-tip{opacity:0}
+#hud.kc .cbtn,#hud.kc #pauseBtn{pointer-events:none}
+.breath-tip{position:absolute;right:calc(env(safe-area-inset-right,0px) + 128px);bottom:calc(env(safe-area-inset-bottom,0px) + 122px);
+  font-size:10px;letter-spacing:.12em;text-transform:uppercase;opacity:.7}
+
+#rotate{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 130px);z-index:6;
+  background:rgba(20,16,10,.86);border:1px solid var(--line);padding:8px 10px 8px 14px;display:flex;gap:10px;align-items:center;
+  font-family:var(--f-type);font-size:13px;width:max-content;max-width:calc(100vw - 32px)}
+#rotate button{background:none;border:1px solid var(--line);padding:4px 10px;border-radius:2px}
+
+/* ---------- Dossier screens ---------- */
+.screen{position:fixed;inset:0;z-index:10;overflow-y:auto;touch-action:pan-y;-webkit-overflow-scrolling:touch;
+  display:flex;justify-content:center;align-items:flex-start;
+  padding:calc(env(safe-area-inset-top,0px) + 18px) max(16px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 18px) max(16px,env(safe-area-inset-left,0px));
+  background:radial-gradient(ellipse at center,rgba(10,12,9,.35),rgba(10,12,9,.82));box-sizing:border-box}
+.dossier{position:relative;box-sizing:border-box;width:100%;max-width:820px;margin:auto 0;color:var(--paper-ink);
+  background:
+    repeating-linear-gradient(0deg,rgba(60,45,20,.045) 0 1px,transparent 1px 26px),
+    radial-gradient(ellipse at 20% 10%,rgba(255,250,230,.35),transparent 55%),
+    radial-gradient(ellipse at 90% 100%,rgba(120,90,40,.22),transparent 60%),
+    var(--paper);
+  padding:18px 22px 20px;box-shadow:0 18px 50px rgba(0,0,0,.6),0 0 0 1px rgba(0,0,0,.4);font-family:var(--f-type)}
+.doc-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 14px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  border-bottom:1.5px solid rgba(42,36,25,.55);padding-bottom:6px}
+.title{font-family:var(--f-display);font-weight:900;font-size:clamp(46px,9vw,84px);line-height:.88;margin:12px 0 4px;letter-spacing:.02em;
+  color:#3a2e1c;text-transform:uppercase;text-wrap:balance}
+.title span{color:var(--rust);margin-left:.2em}
+.lede{margin:6px 0 12px;font-size:14px;line-height:1.5;max-width:60ch}
+.cols{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:18px}
+@media (max-width:640px){.cols{grid-template-columns:minmax(0,1fr)}}
+.missions{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.mbtn{width:100%;display:grid;grid-template-columns:2.4em minmax(0,1fr) auto;gap:2px 10px;align-items:baseline;text-align:left;
+  background:rgba(255,252,238,.35);border:1px solid rgba(42,36,25,.35);padding:8px 10px;color:var(--paper-ink);font-family:var(--f-type)}
+.mbtn:hover:not(:disabled){background:rgba(255,252,238,.6)}
+.mbtn:disabled{opacity:.45;cursor:not-allowed}
+.mbtn .no{font-family:var(--f-display);font-weight:900;font-size:22px;color:var(--rust);grid-row:span 2}
+.mbtn .nm{font-size:15px;text-transform:uppercase;letter-spacing:.06em}
+.mbtn .meta{grid-column:2 / span 2;font-size:11.5px;opacity:.78}
+.mbtn .best{font-size:11px;opacity:.8;font-family:var(--f-mono)}
+.side{display:flex;flex-direction:column;gap:12px}
+.seg{display:grid;grid-template-columns:1fr 1fr;border:1.5px solid var(--paper-ink)}
+.seg button{background:transparent;border:0;padding:8px 6px;font-family:var(--f-type);color:var(--paper-ink);text-transform:uppercase;letter-spacing:.08em}
+.seg button[aria-checked="true"]{background:var(--paper-ink);color:var(--paper)}
+.note{font-size:12px;line-height:1.45;margin:0}
+.howto{margin:0;padding:0 0 0 1.1em;font-size:12.5px;line-height:1.55}
+.howto b{font-weight:normal;text-decoration:underline;text-underline-offset:2px}
+.ghost{background:transparent;border:1px solid rgba(42,36,25,.5);padding:7px 10px;font-family:var(--f-type);color:var(--paper-ink);text-align:left}
+.stamp{position:absolute;right:18px;top:46px;transform:rotate(-9deg);border:3px double var(--rust);color:var(--rust);
+  font-family:var(--f-display);font-weight:900;font-size:17px;letter-spacing:.12em;padding:3px 10px;text-transform:uppercase;opacity:.75;pointer-events:none}
+@media (max-width:520px){.stamp{display:none}}
+.primary{background:var(--paper-ink);color:var(--paper);border:0;padding:12px 18px;font-family:var(--f-display);font-weight:900;
+  font-size:20px;letter-spacing:.1em;text-transform:uppercase}
+.primary:hover{background:#000}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:14px}
+.brief-meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:12px 0}
+.brief-meta div{border-top:1.5px solid rgba(42,36,25,.5);padding-top:4px;font-size:15px}
+.brief-meta .lbl{color:var(--paper-ink);opacity:.7}
+.brief-text{font-size:14.5px;line-height:1.6;max-width:62ch;margin:8px 0}
+.tip{font-size:12.5px;border-left:3px solid var(--rust);padding:4px 0 4px 10px;margin:10px 0 0;max-width:62ch}
+.h2{font-family:var(--f-display);font-weight:900;font-size:clamp(34px,6vw,52px);text-transform:uppercase;margin:10px 0 2px;line-height:.95;color:#3a2e1c}
+.h2.fail{color:var(--rust)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin:12px 0}
+.stats div{border-top:1.5px solid rgba(42,36,25,.5);padding-top:4px;font-size:20px;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.stats .lbl{font-family:var(--f-type);color:var(--paper-ink);opacity:.7}
+.rating{font-size:15px;margin:4px 0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="Rifle view over the village of Valmont"></canvas>
+
+<div id="hud" hidden>
+  <div class="hud-top">
+    <div class="plate">
+      <span class="lbl">Health</span>
+      <div class="hp-bar"><i id="hpbar"></i></div>
+      <div class="ammo" id="ammo"></div>
+      <div class="expo ok" id="expo">Concealed</div>
+    </div>
+    <div class="hud-c">
+      <div class="plate" id="obj">Targets 0 / 6</div>
+      <div class="plate" id="clock">3:00</div>
+    </div>
+    <div class="hud-r">
+      <div class="plate"><span class="lbl">Wind</span><span id="windArrow">→</span> <span id="windVal">0.0</span> m/s</div>
+      <div class="plate"><span class="lbl">Score</span><span id="score">0</span></div>
+      <button id="pauseBtn" aria-label="Pause">II</button>
+    </div>
+  </div>
+  <div class="plate" id="readout" hidden></div>
+  <div id="toast"></div>
+  <div class="breath-tip" id="breathTip">Hold to steady · release to fire</div>
+  <div class="cover-wrap"><button class="cbtn" id="coverBtn" aria-label="Take cover">Cover</button></div>
+  <div class="ctrl">
+    <button class="cbtn" id="scopeBtn" aria-label="Toggle scope">Scope</button>
+    <button class="cbtn" id="reloadBtn" aria-label="Reload">Load</button>
+    <button class="cbtn" id="fireBtn" aria-label="Fire. Hold to steady breath, release to shoot">Fire</button>
+  </div>
+</div>
+
+<div id="rotate" hidden><span>Turn your phone sideways for the full view.</span><button id="rotateOk">OK</button></div>
+
+<!-- Age gate -->
+<div id="gate" class="screen" hidden>
+  <div class="dossier" style="max-width:580px">
+    <div class="doc-head"><span>Content warning</span><span>Restricted</span></div>
+    <div class="h2 fail">Adults only · 18+</div>
+    <p class="brief-text">Valmont 1944 shows realistic wartime violence: gunshot wounds, blood, wounded and dying soldiers, and bodies left on the field. It is meant for adults.</p>
+    <div class="row">
+      <button class="primary" id="gateYes">I am 18 or older</button>
+      <button class="ghost" id="gateSoft">Play with graphic violence off</button>
+    </div>
+  </div>
+</div>
+
+<!-- Main menu -->
+<div id="menu" class="screen">
+  <div class="dossier">
+    <div class="doc-head"><span>Field orders</span><span>2nd Rifle Coy · Sniper section</span><span>August 1944</span></div>
+    <h1 class="title">Valmont<span>1944</span></h1>
+    <p class="lede">You hold the hayloft on the ridge above Valmont with a scoped Lee-Enfield No. 4 (T): ten rounds in the magazine, loaded five at a time by stripper clip. The enemy is in the village below. Every shot tells them roughly where you are.</p>
+    <div class="cols">
+      <ol class="missions" id="missionList"></ol>
+      <div class="side">
+        <div class="seg" role="radiogroup" aria-label="Difficulty">
+          <button role="radio" data-diff="recruit" aria-checked="true">Recruit</button>
+          <button role="radio" data-diff="veteran" aria-checked="false">Veteran</button>
+        </div>
+        <p class="note" id="diffNote"></p>
+        <ul class="howto">
+          <li><b>Drag</b> anywhere on the screen to aim.</li>
+          <li><b>Scope</b> to look through the telescope.</li>
+          <li><b>Hold Fire</b> to steady your breath, <b>release</b> to shoot.</li>
+          <li>Head and chest kill. Gut and leg hits wound, and wounded men crawl for cover.</li>
+          <li>The round drops: about 3 mils at 330 m, 5 mils at 470 m. Use the marks under the crosshair.</li>
+          <li>Wind pushes the round sideways. Watch the smoke and the flag.</li>
+          <li>Shooting gives you away. Tap <b>Cover</b> to drop out of sight until they lose you.</li>
+        </ul>
+        <button class="ghost" id="soundBtn">Sound: on</button>
+        <button class="ghost" id="goreBtn">Graphic violence: on</button>
+        <button class="ghost" id="kcBtn">Kill cam: on</button>
+      </div>
+    </div>
+    <div class="stamp">Sniper section</div>
+  </div>
+</div>
+
+<!-- Briefing -->
+<div id="brief" class="screen" hidden>
+  <div class="dossier">
+    <div class="doc-head"><span id="bHead">Mission</span><span>Valmont sector</span><span id="bTime">0540 hrs</span></div>
+    <div class="h2" id="bName">Morning Fog</div>
+    <p class="brief-text" id="bText"></p>
+    <div class="brief-meta" id="bMeta"></div>
+    <p class="tip" id="bTip"></p>
+    <div class="row">
+      <button class="primary" id="beginBtn">Take position</button>
+      <button class="ghost" id="briefBack">Back to orders</button>
+    </div>
+  </div>
+</div>
+
+<!-- Results -->
+<div id="result" class="screen" hidden>
+  <div class="dossier">
+    <div class="doc-head"><span>After-action report</span><span id="rMission">Mission 1</span><span id="rDiff">Recruit</span></div>
+    <div class="h2" id="rTitle">Mission complete</div>
+    <p class="brief-text" id="rText"></p>
+    <div class="stats" id="rStats"></div>
+    <p class="rating" id="rRating"></p>
+    <div class="row">
+      <button class="primary" id="rNext">Next mission</button>
+      <button class="ghost" id="rRetry">Retry</button>
+      <button class="ghost" id="rMenu">Field orders</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pause -->
+<div id="pause" class="screen" hidden>
+  <div class="dossier" style="max-width:440px">
+    <div class="doc-head"><span>Paused</span><span id="pMission"></span></div>
+    <div class="h2">Hold fire</div>
+    <div class="row">
+      <button class="primary" id="pResume">Resume</button>
+      <button class="ghost" id="pRestart">Restart mission</button>
+      <button class="ghost" id="pSound">Sound: on</button>
+      <button class="ghost" id="pQuit">Field orders</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+(() => {
+// ================= utilities =================
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[Math.floor(Math.random() * a.length)];
+function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function hexRgb(h) { h = h.replace('#', ''); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; }
+const $ = id => document.getElementById(id);
+
+// ================= world geometry =================
+// World units: at distance d metres, 1 m = K/d units. Camera sits 12 m up, so ground at distance d is drawn at HZ + K*12/d.
+const WW = 3200, WH = 900, HZ = 400, K = 3200, CAMH = 12, GK = K * CAMH;
+const V0 = 744, ZERO = 100, KD = 0.0008, MAG = 10;  // .303 Mk VII muzzle velocity, zero, drag decay per metre, magazine
+const S = 1.6;                             // bake resolution
+const gy = d => HZ + GK / d;
+const ps = d => K / d;
+const BANDS = { back: [0, WH], mid: [300, 640], front: [500, WH] };
+
+// ================= time of day palettes =================
+const TIMES = {
+  fog:   { skyTop: '#8a96a0', skyBot: '#cfd1c8', sun: '#f2ecd8', sunX: 900,  sunY: 230, fog: '#c3c6bd', fogK: 1 / 380,  light: 0.95, ground: '#66704f', far: '#7f8b86', cloud: 0.10 },
+  noon:  { skyTop: '#5d7d9c', skyBot: '#cad2cb', sun: '#fff7de', sunX: 2350, sunY: 110, fog: '#b9c3c4', fogK: 1 / 1300, light: 1.0,  ground: '#6c7742', far: '#6d8080', cloud: 0.22 },
+  storm: { skyTop: '#3b454d', skyBot: '#8d928b', sun: '#cfcab9', sunX: 1300, sunY: 170, fog: '#80867f', fogK: 1 / 850,  light: 0.78, ground: '#4f5a3d', far: '#59625f', cloud: 0.45 },
+  dusk:  { skyTop: '#272d47', skyBot: '#e08a4b', sun: '#ffd08c', sunX: 2650, sunY: 340, fog: '#a76c4c', fogK: 1 / 950,  light: 0.68, ground: '#434a31', far: '#5a4a4c', cloud: 0.25 },
+};
+let P = null;
+function setTime(key) { P = Object.assign({ key }, TIMES[key]); P.fogRgb = hexRgb(P.fog); }
+function fogF(d) { return d === Infinity ? 0.9 : Math.min(0.88, 1 - Math.exp(-d * P.fogK)); }
+function shade(hex, d, k = 1, a = 1) {
+  const c = hexRgb(hex), l = P.light * k, f = fogF(d), fc = P.fogRgb;
+  const r = Math.min(255, c[0] * l), g = Math.min(255, c[1] * l), b = Math.min(255, c[2] * l);
+  return `rgba(${Math.round(r + (fc[0] - r) * f)},${Math.round(g + (fc[1] - g) * f)},${Math.round(b + (fc[2] - b) * f)},${a})`;
+}
+
+// ================= layout (same village every mission) =================
+const LAY = makeLayout();
+function makeLayout() {
+  const R = rng(1944);
+  const L = { objs: [], windows: [], solids: [], peeks: [], smokes: [], belfry: null, carts: [] };
+  const houseCols = ['#9c9180', '#a89a82', '#8f8a7c', '#b2a68e', '#8b8273', '#a39882', '#978b78'];
+  const roofCols = ['#6e4536', '#5b3f35', '#4f4d50', '#744b39', '#5e5650'];
+  const shutCols = ['#4f6470', '#5d6b4f', '#6b5444', '#77766a'];
+  L.objs.push({ type: 'church', x: 1990, d: 470 });
+  L.objs.push({ type: 'road', d: 330 });
+  L.objs.push({ type: 'road2', d: 200 });
+  L.objs.push({ type: 'poles', d: 348 });
+  let x = 230;
+  while (x < 3020) {
+    const d = 255 + R() * 175, s = ps(d);
+    const wm = 8 + R() * 6, wpx = wm * s, cx = x + wpx / 2;
+    if (cx > 1860 && cx < 2120) { x = 2125; continue; }
+    const floors = R() < 0.55 ? 2 : 1;
+    const hm = floors === 2 ? 6.2 + R() * 1.2 : 3.4 + R() * 0.8;
+    L.objs.push({ type: 'house', x: cx, d, w: wm, h: hm, floors, roof: 2.4 + R() * 2.6, gable: R() < 0.5,
+      col: houseCols[Math.floor(R() * houseCols.length)], roofCol: roofCols[Math.floor(R() * roofCols.length)],
+      shut: shutCols[Math.floor(R() * shutCols.length)], dmg: R() < 0.35, seed: Math.floor(R() * 1e9) });
+    x += wpx + 12 + R() * 120;
+  }
+  for (let i = 0; i < 9; i++) {
+    const tx = 120 + R() * 2960;
+    if (tx > 1880 && tx < 2110) continue;
+    L.objs.push({ type: 'tree', x: tx, d: 300 + R() * 260, h: 9 + R() * 7, dead: R() < 0.45, seed: Math.floor(R() * 1e9) });
+  }
+  // mid-field cover for runners
+  [[780, 'cart'], [1180, 'hay'], [1720, 'cart'], [2240, 'hay'], [2700, 'cart']].forEach(([cx, t]) => {
+    L.objs.push({ type: t, x: cx, d: 228 }); L.carts.push(cx);
+  });
+  // front cover
+  L.objs.push({ type: 'wall', d: 175, x0: 600, x1: 1110, seed: 3 });
+  L.objs.push({ type: 'wall', d: 175, x0: 1420, x1: 1830, seed: 5 });
+  L.objs.push({ type: 'wall', d: 175, x0: 2360, x1: 2930, seed: 7 });
+  L.objs.push({ type: 'tank', d: 195, x: 1250 });
+  L.objs.push({ type: 'hedge', d: 128, x0: -40, x1: 540, seed: 11 });
+  L.objs.push({ type: 'hedge', d: 128, x0: 2960, x1: 3240, seed: 13 });
+  L.objs.push({ type: 'wire', d: 105, x0: 900, x1: 2300 });
+  L.objs.push({ type: 'rubble', d: 88, x: 260, w: 16 });
+  L.objs.push({ type: 'rubble', d: 84, x: 2980, w: 18 });
+  L.objs.push({ type: 'rubble', d: 95, x: 1950, w: 8 });
+
+  // ---- solids & spawn spots ----
+  for (const o of L.objs) {
+    if (o.type === 'house') {
+      const s = ps(o.d), by = gy(o.d), w = o.w * s, x0 = o.x - w / 2, top = by - o.h * s;
+      o.solid = { x0, x1: x0 + w, y0: top, y1: by, d: o.d };
+      L.solids.push(o.solid);
+      L.solids.push({ x0: x0 + w * 0.2, x1: x0 + w * 0.8, y0: top - o.roof * s * 0.65, y1: top, d: o.d });
+      if (o.dmg && L.smokes.length < 3 && R() < 0.7) L.smokes.push({ x: o.x + w * 0.15, y: top - o.roof * s * 0.3, d: o.d });
+      // windows
+      o.wins = [];
+      const n = Math.max(1, Math.floor(o.w / 3.1));
+      const doorAt = Math.floor(R() * n);
+      for (let f = 0; f < o.floors; f++) {
+        for (let i = 0; i < n; i++) {
+          const wx = x0 + w * (i + 0.5) / n;
+          const sillM = 1.0 + f * 3.0;
+          const win = { x: wx, sill: by - sillM * s, w: 1.0 * s, h: 1.4 * s, d: o.d, s, broken: R() < 0.3, shutter: R() < 0.6, door: f === 0 && i === doorAt };
+          o.wins.push(win);
+          if (!win.door) L.windows.push(win);
+        }
+      }
+    } else if (o.type === 'church') {
+      const s = ps(o.d), by = gy(o.d);
+      o.solid = { x0: o.x - 11 * s, x1: o.x + 11 * s, y0: by - 12 * s, y1: by, d: o.d };
+      L.solids.push(o.solid);
+      L.solids.push({ x0: o.x - 6 * s, x1: o.x + 6 * s, y0: by - 18 * s, y1: by - 12 * s, d: o.d });
+      const tx = o.x + 7 * s;
+      L.solids.push({ x0: tx - 3 * s, x1: tx + 3 * s, y0: by - 31 * s, y1: by, d: o.d });
+      L.belfry = { x: tx, sill: by - 24.6 * s, w: 1.5 * s, h: 2.4 * s, d: o.d, s };
+    } else if (o.type === 'tree') {
+      const s = ps(o.d), by = gy(o.d);
+      L.solids.push({ x0: o.x - 0.3 * s, x1: o.x + 0.3 * s, y0: by - o.h * s, y1: by, d: o.d });
+      if (!o.dead) L.solids.push({ x0: o.x - 2.4 * s, x1: o.x + 2.4 * s, y0: by - o.h * s, y1: by - o.h * 0.45 * s, d: o.d });
+    } else if (o.type === 'cart' || o.type === 'hay') {
+      const s = ps(o.d), by = gy(o.d);
+      L.solids.push({ x0: o.x - 1.6 * s, x1: o.x + 1.6 * s, y0: by - 1.5 * s, y1: by, d: o.d });
+    } else if (o.type === 'wall') {
+      const s = ps(o.d), by = gy(o.d);
+      o.top = by - 1.6 * s;
+      L.solids.push({ x0: o.x0, x1: o.x1, y0: o.top, y1: by, d: o.d });
+      for (let px = o.x0 + 45; px < o.x1 - 30; px += 95) L.peeks.push({ x: px, d: 180, top: o.top, rise: 0.48 });
+    } else if (o.type === 'tank') {
+      const s = ps(o.d), by = gy(o.d);
+      o.top = by - 1.9 * s;
+      L.solids.push({ x0: o.x - 3.4 * s, x1: o.x + 3.4 * s, y0: o.top, y1: by, d: o.d });
+      L.solids.push({ x0: o.x - 1.4 * s, x1: o.x + 1.2 * s, y0: by - 2.7 * s, y1: o.top, d: o.d });
+      L.peeks.push({ x: o.x - 2.6 * s, d: 200, top: o.top, rise: 0.25 });
+      L.peeks.push({ x: o.x + 2.5 * s, d: 200, top: o.top, rise: 0.25 });
+    } else if (o.type === 'hedge') {
+      const s = ps(o.d), by = gy(o.d);
+      o.top = by - 1.9 * s;
+      L.solids.push({ x0: o.x0, x1: o.x1, y0: o.top, y1: by, d: o.d });
+      for (let px = Math.max(40, o.x0 + 60); px < Math.min(3160, o.x1 - 40); px += 120) L.peeks.push({ x: px, d: 132, top: o.top, rise: 0.15 });
+    }
+  }
+  L.solids.sort((a, b) => a.d - b.d);
+  // drop windows hidden behind anything nearer
+  const visible = w => !L.solids.some(s => s.d < w.d - 1 && s.x1 > w.x - w.w && s.x0 < w.x + w.w && s.y1 > w.sill - w.h && s.y0 < w.sill + 2);
+  L.windows = L.windows.filter(visible);
+  return L;
+}
+function depthAt(x, y) {
+  for (const s of LAY.solids) if (x >= s.x0 && x <= s.x1 && y >= s.y0 && y <= s.y1) return s.d;
+  return y > HZ + 3 ? GK / (y - HZ) : Infinity;
+}
+function occluded(x, y, d) {
+  for (const s of LAY.solids) { if (s.d >= d - 1) break; if (x >= s.x0 && x <= s.x1 && y >= s.y0 && y <= s.y1) return true; }
+  return false;
+}
+
+// ================= baking the scenery =================
+const layers = {};
+let bakedKey = null;
+function prep(tod) { setTime(tod); if (bakedKey !== tod) { bake(); bakedKey = tod; } }
+function mkCanvas(w, h) { const c = document.createElement('canvas'); c.width = Math.round(w); c.height = Math.round(h); return c; }
+function bake() {
+  for (const k in BANDS) {
+    const [y0, y1] = BANDS[k];
+    const cv = layers[k] && layers[k].width === Math.round(WW * S) ? layers[k] : mkCanvas(WW * S, (y1 - y0) * S);
+    const c = cv.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cv.width, cv.height);
+    c.setTransform(S, 0, 0, S, 0, -y0 * S);
+    layers[k] = cv; layers[k].c = c;
+  }
+  drawBackdrop(layers.back.c);
+  const objs = [...LAY.objs].sort((a, b) => b.d - a.d);
+  for (const o of objs) {
+    const L = o.type === 'road' || o.type === 'poles' ? 'back' : o.type === 'road2' ? 'back' : o.d >= 335 ? 'back' : o.d >= 200 ? 'mid' : 'front';
+    drawObj(layers[L].c, o);
+  }
+}
+function drawBackdrop(c) {
+  const R = rng(77);
+  let g = c.createLinearGradient(0, 0, 0, HZ + 30);
+  g.addColorStop(0, P.skyTop); g.addColorStop(1, P.skyBot);
+  c.fillStyle = g; c.fillRect(0, 0, WW, HZ + 40);
+  // sun glow
+  g = c.createRadialGradient(P.sunX, P.sunY, 0, P.sunX, P.sunY, 520);
+  g.addColorStop(0, hexA(P.sun, 0.55)); g.addColorStop(0.15, hexA(P.sun, 0.25)); g.addColorStop(1, hexA(P.sun, 0));
+  c.fillStyle = g; c.fillRect(0, 0, WW, HZ + 40);
+  c.fillStyle = hexA(P.sun, P.key === 'fog' ? 0.5 : 0.92);
+  c.beginPath(); c.arc(P.sunX, P.sunY, P.key === 'dusk' ? 34 : 22, 0, TAU); c.fill();
+  // clouds
+  for (let i = 0; i < 46; i++) {
+    const cx = R() * WW, cy = 30 + R() * (HZ - 110), rx = 60 + R() * 220, ry = 10 + R() * 26;
+    const a = P.cloud * (0.35 + R() * 0.65);
+    const cg = c.createRadialGradient(cx, cy, 0, cx, cy, rx);
+    const tone = P.key === 'dusk' ? '#e9a679' : P.key === 'storm' ? '#5d666b' : '#f3f1ea';
+    cg.addColorStop(0, hexA(tone, a)); cg.addColorStop(1, hexA(tone, 0));
+    c.save(); c.translate(cx, cy); c.scale(1, ry / rx); c.translate(-cx, -cy);
+    c.fillStyle = cg; c.beginPath(); c.arc(cx, cy, rx, 0, TAU); c.fill(); c.restore();
+  }
+  // distant smoke plumes (baked)
+  for (const [px, h] of [[520, 160], [2900, 120]]) {
+    for (let i = 0; i < 18; i++) {
+      const t = i / 18, yy = HZ - 4 - t * h, xx = px + t * t * 70, r = 6 + t * 30;
+      c.fillStyle = hexA(P.key === 'dusk' ? '#3c3434' : '#55585a', 0.10 * (1 - t * 0.6));
+      c.beginPath(); c.arc(xx, yy, r, 0, TAU); c.fill();
+    }
+  }
+  // ridges
+  const ridge = (d, base, amp, col, seed) => {
+    const rr = rng(seed);
+    const ph = [rr() * 10, rr() * 10, rr() * 10];
+    c.fillStyle = shade(col, d);
+    c.beginPath(); c.moveTo(0, HZ + 20);
+    for (let x = 0; x <= WW; x += 16) {
+      const y = base - amp * (0.55 * Math.sin(x / 410 + ph[0]) + 0.3 * Math.sin(x / 167 + ph[1]) + 0.15 * Math.sin(x / 61 + ph[2]));
+      c.lineTo(x, y);
+    }
+    c.lineTo(WW, HZ + 20); c.closePath(); c.fill();
+  };
+  ridge(4000, HZ - 22, 22, P.far, 3);
+  ridge(2400, HZ - 8, 14, '#5e6a55', 4);
+  // tree line on second ridge
+  c.fillStyle = shade('#3f4a35', 2000);
+  for (let x = 0; x < WW; x += 5) { const h = 3 + Math.abs(Math.sin(x * 0.07) * 4) + (R() * 3); if (Math.sin(x / 300) > -0.2) { c.beginPath(); c.arc(x, HZ - 3 - h * 0.5, h * 0.7, 0, TAU); c.fill(); } }
+  // ground
+  g = c.createLinearGradient(0, HZ, 0, WH);
+  g.addColorStop(0, shade(P.ground, 1600)); g.addColorStop(0.18, shade(P.ground, 500)); g.addColorStop(1, shade(P.ground, 90, 0.9));
+  c.fillStyle = g; c.fillRect(0, HZ - 1, WW, WH - HZ + 1);
+  // field patches
+  const bands = [1400, 1000, 760, 600, 500, 430, 370, 300, 250, 210, 175, 150, 125, 105, 90, 80];
+  for (let i = 0; i < bands.length - 1; i++) {
+    const d0 = bands[i], d1 = bands[i + 1], y0 = gy(d0), y1 = gy(d1);
+    let x = -R() * 300;
+    while (x < WW) {
+      const w = 160 + R() * 520;
+      const tint = ['#76804a', '#6a7340', '#8a8150', '#5f6a3d', '#7d7a4c'][Math.floor(R() * 5)];
+      c.fillStyle = shade(tint, (d0 + d1) / 2, 1, 0.55);
+      c.fillRect(x, y0, w, y1 - y0 + 0.5);
+      x += w;
+    }
+    // hedgerow line
+    if (d0 > 300 && i % 2 === 0) {
+      c.fillStyle = shade('#34402b', d0);
+      const s = ps(d0);
+      for (let x2 = 0; x2 < WW; x2 += Math.max(2, s * 1.2)) {
+        if (Math.sin(x2 / 230 + i) < -0.55) continue;
+        c.beginPath(); c.arc(x2, y0, s * (1.1 + R() * 0.8), Math.PI, 0); c.fill();
+      }
+    }
+  }
+  // craters & furrows near
+  for (let i = 0; i < 26; i++) {
+    const d = 110 + R() * 500, s = ps(d), cx = R() * WW, cy = gy(d);
+    const rx = (2 + R() * 3) * s, ry = rx * (CAMH / d) * 1.8 + 1;
+    c.fillStyle = shade('#2f2a20', d, 1, 0.75); c.beginPath(); c.ellipse(cx, cy, rx, Math.max(1, ry), 0, 0, TAU); c.fill();
+    c.strokeStyle = shade('#8a7d60', d, 1, 0.6); c.lineWidth = Math.max(0.5, s * 0.25);
+    c.beginPath(); c.ellipse(cx, cy - ry * 0.2, rx * 1.1, Math.max(1, ry * 1.1), 0, Math.PI * 1.05, Math.PI * 1.95); c.stroke();
+  }
+  // grass tufts near ground
+  for (let i = 0; i < 900; i++) {
+    const d = 78 + R() * 180, s = ps(d), x = R() * WW, y = gy(d);
+    c.strokeStyle = shade(R() < 0.5 ? '#4b5631' : '#8b8a55', d, 1, 0.7); c.lineWidth = Math.max(0.5, s * 0.04);
+    c.beginPath(); c.moveTo(x, y); c.lineTo(x + (R() - 0.5) * s * 0.3, y - s * (0.2 + R() * 0.4)); c.stroke();
+  }
+  // far farmhouses
+  for (const [fx, fd] of [[420, 1150], [2780, 1000], [1320, 1300]]) {
+    const s = ps(fd), by = gy(fd);
+    c.fillStyle = shade('#a89c86', fd); c.fillRect(fx - 7 * s, by - 5 * s, 14 * s, 5 * s);
+    c.fillStyle = shade('#6b4a3c', fd); c.beginPath(); c.moveTo(fx - 7.5 * s, by - 5 * s); c.lineTo(fx, by - 9 * s); c.lineTo(fx + 7.5 * s, by - 5 * s); c.fill();
+  }
+  // poplars
+  for (let i = 0; i < 24; i++) {
+    const d = 650 + R() * 500, s = ps(d), x = R() * WW, by = gy(d), h = (14 + R() * 8) * s;
+    c.fillStyle = shade('#3e4a33', d); c.beginPath(); c.ellipse(x, by - h * 0.55, 1.6 * s, h * 0.5, 0, 0, TAU); c.fill();
+  }
+}
+function hexA(hex, a) { const c = hexRgb(hex); return `rgba(${c[0]},${c[1]},${c[2]},${a})`; }
+
+function drawObj(c, o) {
+  const R = rng(o.seed || Math.floor(o.d * 13 + (o.x || o.x0 || 0)));
+  const s = ps(o.d), by = gy(o.d);
+  switch (o.type) {
+    case 'road': {
+      const y0 = gy(352), y1 = gy(312);
+      c.fillStyle = shade('#8b7f63', 330); c.fillRect(0, y0, WW, y1 - y0);
+      c.fillStyle = shade('#6d6450', 330, 1, 0.8);
+      c.fillRect(0, gy(340), WW, 0.8); c.fillRect(0, gy(322), WW, 0.8);
+      break;
+    }
+    case 'road2': {
+      c.fillStyle = shade('#867a5f', 200);
+      c.beginPath();
+      const dd = [330, 250, 180, 130, 100, 77];
+      dd.forEach((d, i) => { const x = 1600 - 14 * K / d; i ? c.lineTo(x, gy(d)) : c.moveTo(x, gy(d)); });
+      [...dd].reverse().forEach(d => c.lineTo(1600 - 8 * K / d, gy(d)));
+      c.fill();
+      break;
+    }
+    case 'poles': {
+      const d = o.d, sp = ps(d), b = gy(d);
+      c.strokeStyle = shade('#3a3026', d); c.lineWidth = 0.22 * sp;
+      let prev = null;
+      for (let x = 120; x < WW; x += 270) {
+        c.beginPath(); c.moveTo(x, b); c.lineTo(x, b - 7 * sp); c.moveTo(x - 0.8 * sp, b - 6.6 * sp); c.lineTo(x + 0.8 * sp, b - 6.6 * sp); c.stroke();
+        if (prev !== null && R() < 0.8) {
+          c.save(); c.lineWidth = 0.6; c.strokeStyle = shade('#2c2620', d, 1, 0.7);
+          c.beginPath(); c.moveTo(prev, b - 6.6 * sp); c.quadraticCurveTo((prev + x) / 2, b - 5.6 * sp, x, b - 6.6 * sp); c.stroke(); c.restore();
+        }
+        prev = x;
+      }
+      break;
+    }
+    case 'church': drawChurch(c, o, s, by); break;
+    case 'house': drawHouse(c, o, s, by, R); break;
+    case 'tree': {
+      c.strokeStyle = shade('#3b3024', o.d); c.lineWidth = 0.5 * s; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(o.x, by); c.lineTo(o.x, by - o.h * s); c.stroke();
+      for (let i = 0; i < 6; i++) {
+        const yy = by - o.h * s * (0.4 + R() * 0.5), dir = R() < 0.5 ? -1 : 1, len = (1.5 + R() * 2.5) * s;
+        c.lineWidth = 0.18 * s; c.beginPath(); c.moveTo(o.x, yy); c.lineTo(o.x + dir * len, yy - len * 0.6); c.stroke();
+      }
+      if (!o.dead) {
+        for (let i = 0; i < 14; i++) {
+          c.fillStyle = shade(['#3c4a2e', '#4a5734', '#34402a'][i % 3], o.d);
+          c.beginPath(); c.arc(o.x + (R() - 0.5) * 4 * s, by - o.h * s * (0.55 + R() * 0.4), (1.2 + R() * 1.3) * s, 0, TAU); c.fill();
+        }
+      }
+      break;
+    }
+    case 'cart': {
+      c.fillStyle = shade('#5b4632', o.d); c.fillRect(o.x - 1.6 * s, by - 1.4 * s, 3.2 * s, 0.7 * s);
+      c.strokeStyle = shade('#3b2e22', o.d); c.lineWidth = 0.15 * s;
+      c.beginPath(); c.arc(o.x - 0.9 * s, by - 0.55 * s, 0.55 * s, 0, TAU); c.stroke();
+      c.beginPath(); c.moveTo(o.x + 1.6 * s, by - 1.1 * s); c.lineTo(o.x + 3.1 * s, by - 0.2 * s); c.stroke();
+      c.fillStyle = shade('#3a2c20', o.d); c.fillRect(o.x - 1.6 * s, by - 1.55 * s, 3.2 * s, 0.18 * s);
+      break;
+    }
+    case 'hay': {
+      c.fillStyle = shade('#b39a5b', o.d);
+      c.beginPath(); c.ellipse(o.x, by - 0.75 * s, 1.6 * s, 0.8 * s, 0, Math.PI, 0); c.lineTo(o.x + 1.6 * s, by); c.lineTo(o.x - 1.6 * s, by); c.fill();
+      c.fillStyle = shade('#7d6a3d', o.d, 1, 0.6); c.fillRect(o.x - 1.6 * s, by - 0.15 * s, 3.2 * s, 0.15 * s);
+      break;
+    }
+    case 'wall': {
+      c.fillStyle = shade('#8e8676', o.d); c.fillRect(o.x0, o.top, o.x1 - o.x0, by - o.top);
+      for (let i = 0; i < (o.x1 - o.x0) / 4; i++) {
+        c.fillStyle = shade(R() < 0.5 ? '#7a7264' : '#a39b89', o.d, 1, 0.55);
+        c.fillRect(o.x0 + R() * (o.x1 - o.x0), o.top + R() * (by - o.top) - 2, 3 + R() * 6, 2 + R() * 3);
+      }
+      c.fillStyle = shade('#6e675a', o.d); c.fillRect(o.x0, o.top, o.x1 - o.x0, 0.18 * s);
+      // broken ends
+      c.fillStyle = shade('#7d7566', o.d);
+      for (const ex of [o.x0, o.x1]) { c.beginPath(); c.moveTo(ex, by); c.lineTo(ex, o.top + 4); c.lineTo(ex + (ex === o.x0 ? -8 : 8), by); c.fill(); }
+      break;
+    }
+    case 'tank': {
+      const col = shade('#4a4a3e', o.d), dark = shade('#2b2b24', o.d);
+      c.fillStyle = dark; c.beginPath(); c.roundRect ? c.roundRect(o.x - 3.4 * s, by - 1.0 * s, 6.8 * s, 1.0 * s, 0.4 * s) : c.rect(o.x - 3.4 * s, by - 1.0 * s, 6.8 * s, 1.0 * s); c.fill();
+      c.fillStyle = col; c.beginPath(); c.moveTo(o.x - 3.6 * s, by - 0.9 * s); c.lineTo(o.x - 3.0 * s, by - 1.9 * s); c.lineTo(o.x + 3.2 * s, by - 1.9 * s); c.lineTo(o.x + 3.5 * s, by - 0.9 * s); c.fill();
+      c.beginPath(); c.moveTo(o.x - 1.4 * s, by - 1.9 * s); c.lineTo(o.x - 1.1 * s, by - 2.7 * s); c.lineTo(o.x + 1.0 * s, by - 2.7 * s); c.lineTo(o.x + 1.2 * s, by - 1.9 * s); c.fill();
+      c.strokeStyle = col; c.lineWidth = 0.22 * s; c.beginPath(); c.moveTo(o.x + 1.0 * s, by - 2.35 * s); c.lineTo(o.x + 3.9 * s, by - 1.55 * s); c.stroke();
+      c.fillStyle = shade('#1c1a16', o.d, 1, 0.7);
+      for (let i = 0; i < 6; i++) { c.beginPath(); c.arc(o.x - 2.7 * s + i * 1.08 * s, by - 0.45 * s, 0.32 * s, 0, TAU); c.fill(); }
+      c.fillStyle = shade('#241f1a', o.d, 1, 0.55); c.beginPath(); c.arc(o.x - 0.2 * s, by - 2.2 * s, 0.6 * s, 0, TAU); c.fill(); // scorch
+      break;
+    }
+    case 'hedge': {
+      for (let x = o.x0; x < o.x1; x += 4) {
+        c.fillStyle = shade(['#33402a', '#3e4b30', '#2b3623'][Math.floor(R() * 3)], o.d);
+        const h = (1.4 + R() * 0.7) * s; c.beginPath(); c.arc(x, by - h * 0.55, h * 0.55, 0, TAU); c.fill();
+      }
+      c.fillStyle = shade('#2b3623', o.d); c.fillRect(o.x0, by - 0.9 * s, o.x1 - o.x0, 0.9 * s);
+      break;
+    }
+    case 'wire': {
+      c.strokeStyle = shade('#2d2a24', o.d, 1, 0.9); c.lineWidth = 0.12 * s;
+      for (let x = o.x0; x < o.x1; x += 2.6 * s) { c.beginPath(); c.moveTo(x, by); c.lineTo(x + 0.2 * s, by - 1.2 * s); c.stroke(); }
+      c.lineWidth = 0.6; c.beginPath();
+      for (let x = o.x0; x < o.x1; x += 0.7 * s) c.lineTo(x, by - (0.4 + 0.5 * Math.abs(Math.sin(x * 0.9))) * s);
+      c.stroke();
+      break;
+    }
+    case 'rubble': {
+      for (let i = 0; i < 40; i++) {
+        c.fillStyle = shade(['#7f776a', '#5f594f', '#9a917f', '#4b443b'][Math.floor(R() * 4)], o.d);
+        const rx = o.x + (R() - 0.5) * o.w * s, sz = (0.3 + R() * 0.9) * s;
+        const ry = by + (R() * 0.6) * s;
+        c.beginPath(); c.moveTo(rx - sz, ry); c.lineTo(rx - sz * 0.4, ry - sz * (0.6 + R())); c.lineTo(rx + sz * 0.7, ry - sz * 0.5); c.lineTo(rx + sz, ry); c.fill();
+      }
+      c.strokeStyle = shade('#3b3026', o.d); c.lineWidth = 0.18 * s;
+      c.beginPath(); c.moveTo(o.x - o.w * 0.3 * s, by); c.lineTo(o.x + o.w * 0.1 * s, by - 1.8 * s); c.stroke();
+      break;
+    }
+  }
+}
+function drawChurch(c, o, s, by) {
+  const d = o.d, x = o.x;
+  const stone = shade('#a39a86', d), dark = shade('#7c7464', d), roof = shade('#4d4b4e', d), hole = shade('#16140f', d * 0.6);
+  // nave
+  c.fillStyle = stone; c.fillRect(x - 11 * s, by - 12 * s, 22 * s, 12 * s);
+  c.fillStyle = roof; c.beginPath(); c.moveTo(x - 11.6 * s, by - 12 * s); c.lineTo(x - 2 * s, by - 18.5 * s); c.lineTo(x + 2 * s, by - 18.5 * s); c.lineTo(x + 11.6 * s, by - 12 * s); c.fill();
+  // shell hole in roof
+  c.fillStyle = hole; c.beginPath(); c.moveTo(x - 7 * s, by - 13 * s); c.lineTo(x - 5 * s, by - 16 * s); c.lineTo(x - 3 * s, by - 15 * s); c.lineTo(x - 4 * s, by - 12.6 * s); c.fill();
+  // arched windows
+  for (let i = -2; i <= 1; i++) {
+    const wx = x + i * 4.6 * s + 1.2 * s;
+    c.fillStyle = hole; c.beginPath(); c.rect(wx - 0.7 * s, by - 9 * s, 1.4 * s, 4.5 * s); c.arc(wx, by - 9 * s, 0.7 * s, Math.PI, 0); c.fill();
+  }
+  // tower
+  const tx = x + 7 * s;
+  c.fillStyle = dark; c.fillRect(tx - 3 * s, by - 31 * s, 6 * s, 31 * s);
+  c.fillStyle = stone; c.fillRect(tx - 3 * s, by - 31 * s, 4.2 * s, 31 * s);
+  c.fillStyle = shade('#8f8775', d); c.fillRect(tx - 3.3 * s, by - 28.2 * s, 6.6 * s, 0.6 * s); c.fillRect(tx - 3.3 * s, by - 20 * s, 6.6 * s, 0.5 * s);
+  // spire
+  c.fillStyle = roof; c.beginPath(); c.moveTo(tx - 3.3 * s, by - 31 * s); c.lineTo(tx, by - 43 * s); c.lineTo(tx + 3.3 * s, by - 31 * s); c.fill();
+  c.strokeStyle = shade('#2d2a26', d); c.lineWidth = 0.18 * s; c.beginPath(); c.moveTo(tx, by - 43 * s); c.lineTo(tx, by - 45.5 * s); c.moveTo(tx - 0.8 * s, by - 44.6 * s); c.lineTo(tx + 0.8 * s, by - 44.6 * s); c.stroke();
+  // belfry openings
+  const bw = LAY.belfry;
+  c.fillStyle = hole;
+  for (const ox of [-1.7, 1.7]) {
+    const wx = tx + ox * s;
+    c.beginPath(); c.rect(wx - 0.75 * s, by - 27 * s, 1.5 * s, 2.4 * s); c.arc(wx, by - 27 * s, 0.75 * s, Math.PI, 0); c.fill();
+  }
+  if (bw) bw.x = tx + 1.7 * s;
+  // clock
+  c.fillStyle = shade('#d6cfb8', d); c.beginPath(); c.arc(tx, by - 22.5 * s, 1.1 * s, 0, TAU); c.fill();
+  c.strokeStyle = shade('#2d2a26', d); c.lineWidth = 0.15 * s; c.beginPath(); c.moveTo(tx, by - 22.5 * s); c.lineTo(tx + 0.6 * s, by - 22.9 * s); c.moveTo(tx, by - 22.5 * s); c.lineTo(tx, by - 23.3 * s); c.stroke();
+  // door
+  c.fillStyle = hole; c.beginPath(); c.rect(tx - 0.9 * s, by - 3 * s, 1.8 * s, 3 * s); c.arc(tx, by - 3 * s, 0.9 * s, Math.PI, 0); c.fill();
+}
+function drawHouse(c, o, s, by, R) {
+  const d = o.d, w = o.w * s, x0 = o.x - w / 2, top = by - o.h * s;
+  const wall = shade(o.col, d), roof = shade(o.roofCol, d), hole = shade('#17150f', d * 0.55);
+  c.fillStyle = wall; c.fillRect(x0, top, w, by - top);
+  // stonework
+  for (let i = 0; i < w * (by - top) / 30; i++) {
+    c.fillStyle = shade(R() < 0.5 ? '#6f6858' : '#c2b79e', d, 1, 0.22);
+    c.fillRect(x0 + R() * w, top + R() * (by - top), (0.4 + R()) * s, 0.25 * s);
+  }
+  // shading at one edge & base
+  c.fillStyle = shade('#1f1c16', d, 1, 0.22); c.fillRect(x0 + w * 0.88, top, w * 0.12, by - top);
+  c.fillStyle = shade('#3a352b', d, 1, 0.35); c.fillRect(x0, by - 0.5 * s, w, 0.5 * s);
+  // roof
+  c.fillStyle = roof;
+  if (!o.dmg) {
+    c.beginPath();
+    if (o.gable) { c.moveTo(x0 - 0.4 * s, top); c.lineTo(o.x, top - o.roof * s); c.lineTo(x0 + w + 0.4 * s, top); }
+    else { c.moveTo(x0 - 0.4 * s, top); c.lineTo(x0 + w * 0.18, top - o.roof * s); c.lineTo(x0 + w * 0.82, top - o.roof * s); c.lineTo(x0 + w + 0.4 * s, top); }
+    c.fill();
+    c.fillStyle = shade('#000000', d, 1, 0.18); c.fillRect(x0 - 0.4 * s, top, w + 0.8 * s, 0.35 * s);
+    // chimney
+    c.fillStyle = shade('#7d6f60', d); c.fillRect(x0 + w * 0.7, top - o.roof * s * 0.95, 0.8 * s, o.roof * s * 0.55);
+  } else {
+    // broken roof with exposed rafters
+    c.beginPath(); c.moveTo(x0 - 0.4 * s, top);
+    const n = 9;
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, xx = x0 + t * w;
+      const full = o.gable ? (1 - Math.abs(t - 0.5) * 2) : Math.min(1, Math.min(t, 1 - t) * 5.5);
+      c.lineTo(xx, top - o.roof * s * full * (R() < 0.45 ? 0.25 + R() * 0.4 : 1));
+    }
+    c.lineTo(x0 + w + 0.4 * s, top); c.fill();
+    c.strokeStyle = shade('#2b231b', d); c.lineWidth = 0.15 * s;
+    for (let i = 1; i < 6; i++) { const xx = x0 + w * i / 6; const full = o.gable ? (1 - Math.abs(i / 6 - 0.5) * 2) : 1; c.beginPath(); c.moveTo(xx, top); c.lineTo(xx + (R() - 0.5) * s, top - o.roof * s * full * 0.95); c.stroke(); }
+    // wall breach
+    c.fillStyle = hole; c.beginPath();
+    const hx = x0 + w * (0.2 + R() * 0.5), hy = top + (by - top) * 0.25, hr = 1.3 * s;
+    for (let a = 0; a < TAU; a += TAU / 9) { const r = hr * (0.6 + R() * 0.6); c.lineTo(hx + Math.cos(a) * r, hy + Math.sin(a) * r * 0.8); }
+    c.fill();
+    c.fillStyle = shade('#1b1712', d, 1, 0.3); c.beginPath(); c.ellipse(hx, hy - hr * 1.4, hr * 1.4, hr * 1.2, 0, 0, TAU); c.fill(); // scorch
+  }
+  // windows & doors
+  for (const win of o.wins) {
+    const wx0 = win.x - win.w / 2, wy0 = win.sill - win.h;
+    if (win.door) {
+      c.fillStyle = shade('#3c2e22', d); c.fillRect(win.x - 0.55 * s, by - 2.1 * s, 1.1 * s, 2.1 * s);
+      continue;
+    }
+    c.fillStyle = hole; c.fillRect(wx0, wy0, win.w, win.h);
+    if (!win.broken) {
+      c.strokeStyle = shade('#d8d0bc', d, 1, 0.65); c.lineWidth = Math.max(0.4, 0.08 * s);
+      c.strokeRect(wx0, wy0, win.w, win.h);
+      c.beginPath(); c.moveTo(win.x, wy0); c.lineTo(win.x, win.sill); c.stroke();
+    }
+    if (win.shutter) {
+      c.fillStyle = shade(o.shut, d);
+      c.fillRect(wx0 - 0.55 * s, wy0, 0.5 * s, win.h);
+      if (!win.broken) c.fillRect(wx0 + win.w + 0.05 * s, wy0, 0.5 * s, win.h);
+    }
+    c.fillStyle = shade('#cfc6b0', d, 1, 0.5); c.fillRect(wx0 - 0.12 * s, win.sill, win.w + 0.24 * s, 0.14 * s);
+  }
+}
+
+// ================= missions =================
+const MISSIONS = [
+  { name: 'Morning Fog', tod: 'fog', clockText: '0540 hrs', time: 180, kills: 6, wind: [0.2, 1.0], max: 2, every: [3, 5], types: { window: 6, walker: 3 }, acc: 0.09,
+    text: 'Fog lies over the fields east of Valmont. Enemy riflemen are moving between the houses along the mill road, 250 to 450 metres below your loft. Visibility is poor past 400 metres. Take your time.',
+    tip: 'Hold Fire to steady your breath. Release when the crosshair settles on the chest.' },
+  { name: 'The Mill Road', tod: 'noon', clockText: '1210 hrs', time: 180, kills: 8, wind: [0.8, 2.0], max: 3, every: [2.5, 4.5], types: { window: 5, walker: 3, peek: 3, runner: 2 }, acc: 0.12,
+    text: 'The fog has burned off. Enemy infantry are dug in behind the field wall and the burned-out tank at 175 to 200 metres. Runners are carrying ammunition between the carts. Keep their heads down.',
+    tip: 'Runners cross open ground fast. Lead them: aim a body-width ahead in the direction they move.' },
+  { name: 'Bell Tower', tod: 'storm', clockText: '1630 hrs', time: 210, kills: 8, sniper: 18, wind: [2.0, 3.0], max: 3, every: [2.5, 4], types: { window: 5, walker: 2, peek: 3, runner: 2 }, acc: 0.14,
+    text: 'Weather closing in. Two of our men were hit from the church at 470 metres. There is a marksman in the bell tower. Find the glint of his scope and put him down before he finds you.',
+    tip: 'At 470 m the round drops about 5 mils. Put the fifth mark under the crosshair on his head.' },
+  { name: 'Officer Column', tod: 'noon', clockText: '0915 hrs', time: 210, kills: 6, officers: 3, wind: [1.5, 3.0], max: 3, every: [2.5, 4], types: { window: 4, walker: 2, peek: 3, runner: 2 }, acc: 0.15,
+    text: 'Intelligence reports staff officers moving on foot along the mill road to the command post. They wear peaked caps and carry no rifle. Stop three of them. If two reach the command post, the attack is compromised.',
+    tip: 'Officers walk the road at 330 m and disappear behind houses. Wait for them in a gap.' },
+  { name: 'Last Light', tod: 'dusk', clockText: '2040 hrs', time: 240, kills: 12, sniper: 40, wind: [2.5, 4.0], max: 4, every: [2, 3.5], types: { window: 5, walker: 2, peek: 4, runner: 3 }, acc: 0.17,
+    text: 'The enemy is massing for a counter-attack at dusk. Everything they have is in the village. Hold the ridge until relieved. A second marksman has been reported moving to the tower.',
+    tip: 'In the low light the reticle is dark against dark walls. Use the range readout and the holdover marks.' },
+];
+const ENDLESS = { name: 'Hold the Line', tod: 'dusk', clockText: 'Night', time: Infinity, kills: Infinity, sniper: 60, wind: [1.5, 4.0], max: 3, every: [2.5, 4], types: { window: 5, walker: 2, peek: 4, runner: 3 }, acc: 0.14, endless: true,
+  text: 'No relief is coming. Hold as long as you can. The enemy comes faster as the night goes on.', tip: 'Your score is everything you hit before you go down.' };
+
+// ================= save data =================
+const SAVE_KEY = 'valmont1944-v1';
+let save = { unlocked: 1, best: {}, diff: 'recruit', sound: true, adult: false, gore: true, killcam: true };
+try { const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); if (s) save = Object.assign(save, s); } catch (e) { }
+function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { } }
+
+// ================= audio =================
+let AC = null, master = null, noiseBuf = null;
+function initAudio() {
+  if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    master = AC.createGain(); master.gain.value = save.sound ? 0.85 : 0; master.connect(AC.destination);
+    noiseBuf = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate);
+    const ch = noiseBuf.getChannelData(0); for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
+    // wind bed
+    const src = AC.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+    const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 320;
+    const g = AC.createGain(); g.gain.value = 0.045; src.connect(f); f.connect(g); g.connect(master); src.start();
+  } catch (e) { AC = null; }
+}
+function setSound(on) { save.sound = on; persist(); if (master) master.gain.value = on ? 0.85 : 0; $('soundBtn').textContent = 'Sound: ' + (on ? 'on' : 'off'); $('pSound').textContent = 'Sound: ' + (on ? 'on' : 'off'); }
+function nz(delay, dur, type, freq, gain, attack = 0.002, q = 0.8) {
+  if (!AC) return;
+  const t0 = AC.currentTime + Math.max(0, delay);
+  const src = AC.createBufferSource(); src.buffer = noiseBuf;
+  const f = AC.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+  const g = AC.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(gain, t0 + attack); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  src.connect(f); f.connect(g); g.connect(master); src.start(t0, Math.random() * 1.2); src.stop(t0 + dur + 0.05);
+}
+function tone(delay, dur, freq, gain, type = 'sine', endFreq) {
+  if (!AC) return;
+  const t0 = AC.currentTime + Math.max(0, delay);
+  const o = AC.createOscillator(); o.type = type; o.frequency.setValueAtTime(freq, t0); if (endFreq) o.frequency.exponentialRampToValueAtTime(endFreq, t0 + dur);
+  const g = AC.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(gain, t0 + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + dur + 0.05);
+}
+const sfx = {
+  shot() { nz(0, 0.35, 'lowpass', 3200, 1.0); nz(0, 1.0, 'lowpass', 420, 0.9, 0.004); tone(0, 0.35, 90, 0.7, 'sine', 35); nz(0.32, 1.4, 'lowpass', 650, 0.22, 0.05); nz(0.75, 1.6, 'lowpass', 400, 0.12, 0.1); },
+  bolt(d = 0.3) { nz(d, 0.05, 'highpass', 2200, 0.35); nz(d + 0.18, 0.14, 'bandpass', 1500, 0.25, 0.01, 2); nz(d + 0.42, 0.12, 'bandpass', 1300, 0.25, 0.01, 2); nz(d + 0.62, 0.05, 'highpass', 2500, 0.4); },
+  reload(clips = 1) { nz(0.1, 0.12, 'bandpass', 1400, 0.3, 0.01, 2); for (let c = 0; c < clips; c++) for (let i = 0; i < 5; i++) nz(0.35 + c * 1.3 + i * 0.16, 0.05, 'highpass', 2600, 0.25); const e = 0.3 + clips * 1.3; nz(e, 0.12, 'bandpass', 1300, 0.3, 0.01, 2); nz(e + 0.2, 0.05, 'highpass', 2500, 0.4); },
+  mg() { const n = 6 + Math.floor(Math.random() * 12), dl = Math.random() * 0.3, g = 0.08 + Math.random() * 0.1; for (let i = 0; i < n; i++) nz(dl + i * 0.045, 0.07, 'lowpass', 1100, g, 0.003); },
+  wood() { nz(0, 0.12, 'lowpass', 700, 0.5); tone(0, 0.1, 180, 0.2, 'triangle', 90); },
+  dry() { nz(0, 0.04, 'highpass', 3000, 0.25); },
+  distant(delay, loud = 0.35) { nz(delay, 0.6, 'lowpass', 900, loud, 0.004); nz(delay + 0.25, 1.2, 'lowpass', 380, loud * 0.4, 0.05); },
+  crack() { nz(0, 0.07, 'highpass', 2800, 0.6); },
+  thud(delay) { tone(delay, 0.12, 140, 0.25, 'sine', 60); nz(delay, 0.08, 'lowpass', 600, 0.2); },
+  hurt() { tone(0, 0.25, 70, 0.6, 'sine', 40); nz(0, 0.2, 'lowpass', 300, 0.6); },
+  rumble() { nz(0, 2.6, 'lowpass', 110, 0.5, 0.15); },
+  win() { tone(0, 0.5, 392, 0.12, 'triangle'); tone(0.18, 0.5, 523, 0.12, 'triangle'); tone(0.36, 0.9, 659, 0.12, 'triangle'); },
+};
+function buzz(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) { } }
+
+// ================= canvas & camera =================
+const cvs = $('game'), ctx = cvs.getContext('2d');
+let W = 0, H = 0, DPR = 1, Z0 = 1, ZS = 3;
+const cam = { x: 1600, y: 480 };
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+  W = window.innerWidth; H = window.innerHeight;
+  cvs.width = Math.round(W * DPR); cvs.height = Math.round(H * DPR);
+  cvs.style.width = W + 'px'; cvs.style.height = H + 'px';
+  Z0 = Math.min(H / 600, W / 720);
+  ZS = (2 * scopeR()) / 105;
+  $('rotate').hidden = !(G && !G.ended && H > W * 1.1 && !rotateDismissed);
+}
+function scopeR() { return Math.min(W, H) * 0.47; }
+let rotateDismissed = false;
+window.addEventListener('resize', resize);
+
+// ================= game state =================
+let G = null, mode = 'menu', curMission = 0, attract = 0;
+
+function newGame(mi) {
+  const M = Object.assign({}, mi < MISSIONS.length ? MISSIONS[mi] : ENDLESS);
+  curMission = mi;
+  prep(M.tod);
+  const vet = save.diff === 'veteran';
+  G = {
+    M, vet, time: 0, clock: M.time, kills: 0, score: 0, shots: 0, hits: 0, heads: 0, longest: 0,
+    health: 100, ammo: MAG, bolt: 0, reload: 0, stamina: 1, exhausted: 0, steady: false, pressT: 0, firing: false,
+    hurt: 0, shake: 0, recoil: 0, swayA: 3, swayT: rand(0, 50), wind: 0, windDir: Math.random() < 0.5 ? -1 : 1,
+    windPh: rand(0, 10), enemies: [], fx: [], decals: [], drops: [], props: [], kc: null, lastKc: -99, exposure: 0, cover: false, coverT: 0, tracers: [], texts: [], timers: [], smoke: [], smokeT: 0,
+    spawnT: 2.2, sniperSpawned: false, sniperDead: !M.sniper, officersKilled: 0, officersEscaped: 0, officerT: 6,
+    ended: false, endT: 0, outcome: null, reason: '', scoped: false, zt: 0, threat: [], rumbleT: rand(6, 14), hudT: 0,
+  };
+  cam.x = 1600; cam.y = 470;
+  G.wind = windAt(0);
+}
+function windAt(t) {
+  const [a, b] = G.M.wind;
+  const base = (a + b) / 2, amp = (b - a) / 2;
+  return G.windDir * clamp(base + amp * (0.75 * Math.sin(t * 0.11 + G.windPh) + 0.25 * Math.sin(t * 0.37 + G.windPh * 2)), 0, 6);
+}
+
+// ================= enemies =================
+function mkCols(d, officer) {
+  return {
+    uni: shade(officer ? '#4b5048' : '#5e6450', d), dark: shade('#3d4136', d), skin: shade('#c29b7d', d, 0.95),
+    helm: shade('#4f5543', d), boot: shade('#26231e', d), wood: shade('#5a4630', d), belt: shade('#2b2a25', d),
+    cap: shade('#383c35', d), trim: shade('#b8a970', d), pack: shade('#6b6450', d),
+    hair: shade('#3a2e22', d), blood: shade('#5e0b07', d, 1, 0.92), wound: shade('#3a0503', d),
+  };
+}
+function occupiedNear(x, d) { return G.enemies.some(e => e.alive && Math.abs(e.x - x) < 30 && Math.abs(e.d - d) < 40); }
+function spawnPreferNear(list, getX) {
+  const near = list.filter(p => Math.abs(getX(p) - cam.x) < (G.vet ? 1300 : 900));
+  return pick(near.length ? near : list);
+}
+function spawn(type) {
+  const M = G.M, lvl = Math.min(1.6, 1 + G.time / 400 + (M.endless ? G.time / 300 : 0));
+  let e = null;
+  if (type === 'window') {
+    const pool = LAY.windows.filter(w => !occupiedNear(w.x, w.d));
+    if (!pool.length) return;
+    const w = spawnPreferNear(pool, p => p.x);
+    e = { type, x: w.x, d: w.d + 0.6, base: w.sill + 1.0 * w.s, clip: { x0: w.x - w.w / 2, x1: w.x + w.w / 2, y0: w.sill - w.h, y1: w.sill }, hideOff: 1.0, showOff: 0, layer: 1,
+      hideable: true, canFire: true, upT: rand(4, 7.5) / lvl * (G.vet ? 0.85 : 1), fireT: rand(2.4, 5) / lvl };
+  } else if (type === 'peek') {
+    const pool = LAY.peeks.filter(p => !occupiedNear(p.x, p.d));
+    if (!pool.length) return;
+    const p = spawnPreferNear(pool, q => q.x);
+    const s = ps(p.d), standHead = gy(p.d) - 1.6 * s;
+    // base so that head sits at p.top - rise when shown
+    const base = gy(p.d);
+    e = { type, x: p.x, d: p.d, base, clip: { x0: p.x - 2 * s, x1: p.x + 2 * s, y0: -1e4, y1: p.top }, hideOff: Math.max(0.15, (p.top - standHead) / s + 0.3) , showOff: (p.top - standHead) / s - 0.5 - p.rise * 0.6, layer: 2,
+      hideable: true, canFire: true, upT: rand(3, 5.5) / lvl, fireT: rand(2, 4.2) / lvl, pops: Math.random() < 0.6 ? 1 + Math.floor(Math.random() * 2) : 0 };
+  } else if (type === 'walker' || type === 'officer') {
+    const d = 330, s = ps(d), dir = Math.random() < 0.5 ? -1 : 1;
+    const span = type === 'officer' ? rand(650, 900) : rand(300, 600);
+    let x0 = clamp(cam.x + rand(-500, 500) - dir * span / 2, 80, WW - 80);
+    const x1 = clamp(x0 + dir * span, 60, WW - 60);
+    const speed = (type === 'officer' ? rand(1.3, 1.7) : rand(1.4, 2.4)) * s;
+    e = { type, x: x0, x1, dir, d, base: gy(d), clip: null, layer: 0, hideable: false, canFire: false, vx: dir * speed, upT: Infinity, officer: type === 'officer', phase: rand(0, 6) };
+  } else if (type === 'runner') {
+    const d = 233, s = ps(d);
+    const i = Math.floor(Math.random() * (LAY.carts.length - 1));
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const a = LAY.carts[i], b = LAY.carts[i + 1];
+    const x0 = dir > 0 ? a + 1.8 * ps(228) : b - 1.8 * ps(228), x1 = dir > 0 ? b - 1.8 * ps(228) : a + 1.8 * ps(228);
+    e = { type, x: x0, x1, dir, d, base: gy(d), clip: null, layer: 1, hideable: false, canFire: false, vx: dir * rand(3.6, 4.6) * s * (G.vet ? 1.1 : 1), upT: Infinity, phase: 0 };
+  } else if (type === 'sniper') {
+    const b = LAY.belfry;
+    e = { type, x: b.x, d: b.d + 0.6, base: b.sill + 1.05 * b.s, clip: { x0: b.x - b.w / 2, x1: b.x + b.w / 2, y0: b.sill - b.h - 0.75 * b.s, y1: b.sill }, hideOff: 1.0, showOff: 0, layer: 1,
+      hideable: false, canFire: true, upT: Infinity, fireT: G.vet ? 11 : 15, glint: 0 };
+    G.sniperSpawned = true;
+    toast('Enemy marksman in the bell tower. Watch for the glint.', true);
+  }
+  if (!e) return;
+  Object.assign(e, { alive: true, state: e.clip ? 'rising' : 'up', rise: e.clip ? 0 : 1, t: 0, s: ps(e.d), cols: mkCols(e.d, e.officer), flash: 0, alert: false });
+  G.enemies.push(e);
+  return e;
+}
+function curBase(e) { return e.base + lerp(e.hideOff || 0, e.showOff || 0, e.rise) * e.s + (e.slump || 0) * e.s; }
+function hitTest(e, px, py, ahead) {
+  const x = e.x + (e.vx && e.state === 'up' ? e.vx * ahead : 0), b = curBase(e), s = e.s;
+  if (e.clip && (px < e.clip.x0 || px > e.clip.x1 || py < e.clip.y0 || py > e.clip.y1)) return null;
+  if (e.state === 'wounded') { // lying on the ground
+    const hx = x + e.lieDir * 1.6 * s, x0 = Math.min(x, hx) - 0.15 * s, x1 = Math.max(x, hx) + 0.15 * s;
+    if (px < x0 || px > x1 || py < b - 0.4 * s || py > b + 0.08 * s) return null;
+    return Math.abs(px - hx) < 0.22 * s ? 'head' : 'chest';
+  }
+  const hy = b - 1.6 * s;
+  if ((px - x) ** 2 + (py - hy) ** 2 <= (0.15 * s) ** 2) return 'head';
+  const h = (b - py) / s, ax = Math.abs(px - x) / s;
+  if (ax <= 0.25 && h >= 1.08 && h <= 1.5) return 'chest';
+  if (ax <= 0.24 && h >= 0.82 && h < 1.08) return 'gut';
+  if (ax <= 0.2 && h >= 0 && h < 0.82) return 'legs';
+  return null;
+}
+
+function exposed(e) { return e.alive && (e.state === 'up' || e.state === 'wounded' || (e.state === 'rising' && e.rise > 0.4) || (e.state === 'hiding' && e.rise > 0.4)); }
+
+function updateEnemies(dt) {
+  for (const e of G.enemies) {
+    e.t += dt; if (e.flash > 0) e.flash -= dt;
+    if (e.phase !== undefined && e.alive) e.phase += dt * (e.state === 'wounded' ? (e.crawlT > 0 ? 2.2 : 0.4) : e.type === 'runner' ? 13 : 7);
+    switch (e.state) {
+      case 'wait': e.waitT -= dt; if (e.waitT <= 0) { e.state = 'rising'; e.upT = rand(2.5, 4.5); e.fireT = Math.min(e.fireT, rand(1.2, 2.5)); } break;
+      case 'rising': e.rise = Math.min(1, e.rise + dt / 0.35); if (e.rise >= 1) e.state = 'up'; break;
+      case 'up':
+        if (e.vx) {
+          e.x += e.vx * dt;
+          if ((e.dir > 0 && e.x >= e.x1) || (e.dir < 0 && e.x <= e.x1)) {
+            e.state = 'gone';
+            if (e.officer) { G.officersEscaped++; toast(`An officer reached the command post (${G.officersEscaped} of 2).`, true); }
+          }
+        }
+        if (e.canFire) { e.fireT -= dt * (e.alert ? 1.4 : 1); if (e.fireT <= 0) enemyFire(e); }
+        if (e.type === 'sniper') { e.glint = (e.glint + dt) % 2.4; }
+        if (e.hideable) { e.upT -= dt; if (e.upT <= 0) e.state = 'hiding'; }
+        break;
+      case 'hiding': e.rise = Math.max(0, e.rise - dt / 0.3); if (e.rise <= 0) {
+          if (e.pops > 0) { e.pops--; e.state = 'wait'; e.waitT = rand(1.2, 2.6); }
+          else e.state = 'gone';
+        } break;
+      case 'wounded':
+        e.dt += dt; e.bleedT -= dt;
+        if (e.crawlT > 0) {
+          e.crawlT -= dt; e.x += e.lieDir * 0.25 * e.s * dt;
+          if (save.gore && Math.random() < dt * 5) addDecal(e.x + e.lieDir * 0.5 * e.s, e.base, rand(0.07, 0.14) * e.s, e.d, e.layer, null);
+        }
+        if (e.bleedT <= 0) { e.alive = false; e.wounded = false; e.state = 'dead'; e.dt = 0; }
+        break;
+      case 'dying':
+        e.dt += dt;
+        if (e.clip) {
+          if (e.death === 'drape') { e.slump = Math.min(0.5, e.dt * 2.2); if (e.dt > 0.4) { e.state = 'dead'; e.draped = true; e.dt = 0; dropRifle(e); } }
+          else { e.slump = Math.min(1.6, e.dt * 3.2); if (e.dt > 0.7) e.state = 'gone'; }
+        } else if (e.dt > (e.fallDur || 0.6)) { e.state = 'dead'; e.dt = 0; }
+        break;
+      case 'dead': e.dt += dt; break;
+    }
+  }
+  G.enemies = G.enemies.filter(e => e.state !== 'gone');
+  const dead = G.enemies.filter(e => e.state === 'dead');
+  if (dead.length > 24) G.enemies.splice(G.enemies.indexOf(dead[0]), 1);
+}
+function addDecal(x, y, r, d, layer, clip, splat) {
+  const pts = [], n = splat ? 6 : 2;
+  for (let i = 0; i < n; i++) pts.push([rand(-1, 1) * r * (splat ? 1.1 : 0.4), rand(-0.7, 0.7) * r * (splat ? 1 : 0.3), r * rand(0.35, splat ? 0.75 : 0.7)]);
+  G.decals.push({ x, y, pts, layer, clip, col: shade(Math.random() < 0.5 ? '#5e0b07' : '#741209', d, 1, 0.92), flat: !clip && !splat, drip: splat ? rand(0.4, 1.2) * r : 0 });
+  if (G.decals.length > 500) G.decals.shift();
+}
+function bleed(e, zone, imp) {
+  const s = e.s, head = zone === 'head';
+  if (!save.gore) { G.fx.push({ kind: 'dust', x: imp.x, y: imp.y, r: 0.3 * s, t: 0, life: 0.6, d: e.d }); return; }
+  const floor = e.clip ? e.clip.y1 : e.base;
+  const n = head ? 38 : zone === 'chest' ? 22 : 12;
+  for (let i = 0; i < n; i++) {
+    const a = rand(-Math.PI * 0.95, -Math.PI * 0.05), sp = rand(0.5, head ? 3.4 : 2.2) * s;
+    G.drops.push({ x: imp.x, y: imp.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.9, r: rand(0.02, head ? 0.06 : 0.045) * s, floor, d: e.d, layer: e.layer, col: shade('#7a0f0a', e.d, 1, 0.95) });
+  }
+  G.fx.push({ kind: 'mist', x: imp.x, y: imp.y, r: (head ? 0.5 : 0.32) * s, t: 0, life: head ? 1.3 : 0.8, d: e.d });
+  if (head) G.fx.push({ kind: 'mist', x: imp.x, y: imp.y - 0.1 * s, r: 0.8 * s, t: 0, life: 1.8, d: e.d });
+  if (e.clip && e.type !== 'peek') for (let i = 0; i < (head ? 3 : 2); i++) addDecal(imp.x + rand(-0.25, 0.25) * s, imp.y + rand(-0.35, 0.1) * s, rand(0.12, 0.22) * s, e.d, e.layer, e.clip, true);
+  if (!e.clip) addDecal(e.x - (e.dir || 1) * 0.3 * s, e.base, 0.25 * s, e.d, e.layer, null);
+}
+function dropRifle(e) {
+  const s = e.s;
+  G.props.push({ kind: 'rifle', x: e.x + 0.1 * s, y: e.clip.y1 - 0.1 * s, vx: rand(-0.4, 0.4) * s, vy: rand(-0.6, 0.1) * s, rot: rand(-0.5, 0.5), vr: rand(-5, 5),
+    floor: e.type === 'peek' ? gy(e.d - 9) : gy(e.d - 0.6), s, d: e.d, layer: e.d >= 335 ? 0 : e.layer, col: e.cols.wood, bounced: 0 });
+  if (G.props.length > 40) G.props.shift();
+}
+
+function enemyFire(e) {
+  e.flash = 0.09;
+  const sn = e.type === 'sniper', ex = G.exposure;
+  e.fireT = sn ? (G.vet ? 9 : 12) : rand(3, 5.5);
+  const acc = sn ? (ex > 0.3 ? (G.vet ? 0.8 : 0.65) : 0.1)
+    : G.M.acc * (G.vet ? 1.5 : 1) * (e.alert ? 1.25 : 1) * (0.35 + ex * 1.6) * (G.M.endless ? 1 + G.time / 400 : 1);
+  G.threat.push({ x: e.x, y: curBase(e) - 1.5 * e.s, t: 2.2 });
+  sfx.distant(e.d / 343, sn ? 0.5 : 0.3);
+  after(tof(e.d), () => {
+    if (!G || G.ended) return;
+    if (G.cover) { sfx.wood(); return; }
+    if (Math.random() < acc) {
+      const dmg = sn ? 45 : rand(12, 22);
+      G.health = Math.max(0, G.health - dmg); G.hurt = 1; G.shake = 1; sfx.hurt(); buzz([60, 40, 60]);
+      if (G.health <= 0) endMission(false, sn ? 'The marksman in the tower found you first.' : 'You were hit and carried off the line.');
+    } else { sfx.crack(); G.shake = Math.max(G.shake, 0.35); }
+  });
+}
+
+function after(t, fn) { G.timers.push({ t, fn }); }
+
+function spawnTick(dt) {
+  const M = G.M;
+  G.spawnT -= dt;
+  const active = G.enemies.filter(e => e.alive && !e.wounded && e.type !== 'sniper').length;
+  const lvl = M.endless ? 1 + G.time / 120 : 1;
+  const maxA = M.endless ? Math.min(6, M.max + Math.floor(G.time / 90)) : M.max;
+  if (G.spawnT <= 0 && active < maxA) {
+    const types = Object.entries(M.types); const tot = types.reduce((a, [, w]) => a + w, 0);
+    let r = Math.random() * tot, t = types[0][0];
+    for (const [k, w] of types) { if ((r -= w) <= 0) { t = k; break; } }
+    spawn(t);
+    G.spawnT = rand(M.every[0], M.every[1]) / lvl;
+  }
+  if (M.sniper && !G.sniperSpawned && G.time > M.sniper) spawn('sniper');
+  if (M.endless && G.sniperSpawned && G.sniperDead && Math.random() < dt / 90) { G.sniperSpawned = false; G.sniperDead = false; M.sniper = G.time + 5; }
+  if (M.officers && G.officersKilled < M.officers) {
+    G.officerT -= dt;
+    if (G.officerT <= 0 && !G.enemies.some(e => e.officer && e.alive)) { spawn('officer'); toast('Officer on the mill road.'); G.officerT = rand(10, 16); }
+  }
+}
+
+// ================= shooting =================
+function tof(d) { return (Math.exp(KD * d) - 1) / (KD * V0); }
+function ballistic(d, wind) {
+  const tf = tof(d), t0 = tof(ZERO);
+  const dropM = 4.9 * tf * tf - 4.9 * t0 * t0 * (d / ZERO);
+  const driftM = wind * (tf - d / V0); // lag-time wind drift
+  const s = ps(d);
+  return { tf, dx: driftM * s, dy: dropM * s, dropMil: dropM / d * 1000, driftMil: driftM / d * 1000 };
+}
+
+function getSway() {
+  const t = G.swayT, a = G.swayA;
+  return { x: (Math.sin(t * 0.83) + 0.45 * Math.sin(t * 2.13 + 1.1)) * a * 0.7, y: (Math.sin(t * 1.17 + 0.4) + 0.35 * Math.sin(t * 2.7)) * a * 0.6 };
+}
+function aimPoint() { const sw = getSway(); return { x: cam.x + sw.x, y: cam.y + sw.y - G.recoil }; }
+function canShoot() { return G && !G.ended && !G.cover && G.bolt <= 0 && G.reload <= 0 && G.ammo > 0; }
+function shoot() {
+  if (!G || G.ended || mode !== 'play' || G.kc) return;
+  if (G.cover || G.coverT > 0.3) return;
+  if (G.reload > 0 || G.bolt > 0) { sfx.dry(); return; }
+  if (G.ammo <= 0) { startReload(); return; }
+  G.ammo--; G.shots++;
+  G.exposure = Math.min(1, G.exposure + 0.2);
+  const A = aimPoint();
+  if (!G.scoped) { A.x += rand(-7, 7); A.y += rand(-7, 7); }
+  let hit = null;
+  const cands = G.enemies.filter(exposed).sort((a, b) => a.d - b.d);
+  for (const e of cands) {
+    const B = ballistic(e.d, G.wind), px = A.x + B.dx, py = A.y + B.dy;
+    const zone = hitTest(e, px, py, B.tf);
+    if (zone && !occluded(px, py, e.d)) { hit = { e, zone, B, px, py }; break; }
+  }
+  let imp;
+  if (hit) imp = { x: hit.px, y: hit.py, d: hit.e.d, tf: hit.B.tf, hit };
+  else {
+    const ds = depthAt(A.x, A.y), dd = isFinite(ds) ? Math.min(ds, 1600) : 1200;
+    let B = ballistic(dd, G.wind);
+    const d2 = depthAt(A.x + B.dx, A.y + B.dy); if (isFinite(d2) && d2 < dd) B = ballistic(d2, G.wind);
+    imp = { x: A.x + B.dx, y: A.y + B.dy, d: isFinite(ds) ? Math.min(dd, depthAt(A.x + B.dx, A.y + B.dy)) : Infinity, tf: B.tf };
+  }
+  G.tracers.push({ ax: A.x, ay: A.y, x: imp.x, y: imp.y, t: 0, tf: Math.max(0.12, imp.tf) });
+  after(imp.tf, () => resolveImpact(imp));
+  // kill cam on long lethal shots and on the shot that ends the mission
+  if (hit && save.killcam && !hit.e.wounded && (hit.zone === 'head' || hit.zone === 'chest')) {
+    const M = G.M, e = hit.e;
+    const last = !M.endless && G.kills + 1 >= M.kills && (G.sniperDead || e.type === 'sniper') && (!M.officers || G.officersKilled + (e.officer ? 1 : 0) >= M.officers);
+    if (last || (e.d >= 240 && G.time - G.lastKc > 8 && Math.random() < (hit.zone === 'head' ? 0.75 : 0.4))) {
+      G.kc = { ax: A.x, ay: A.y, px: hit.px, py: hit.py, tf: hit.B.tf, t: 0, e, zone: hit.zone };
+      G.lastKc = G.time; $('hud').classList.add('kc');
+    }
+  }
+  G.recoil = 14; G.shake = Math.max(G.shake, 0.5);
+  sfx.shot(); buzz(35);
+  if (G.ammo > 0) { G.bolt = 1.05; sfx.bolt(0.3); } else { after(0.45, startReload); G.bolt = 0.45; }
+  for (const e of G.enemies) if (e.alive && !e.wounded && Math.abs(e.x - imp.x) < 450) { e.alert = true; if (e.canFire) e.fireT = Math.min(e.fireT, rand(0.9, 2.2)); if (e.hideable && Math.random() < 0.35) e.upT = Math.min(e.upT, rand(0.2, 0.8)); }
+}
+
+function startReload() { if (!G || G.reload > 0 || G.ammo >= MAG || G.ended) return; const clips = Math.ceil((MAG - G.ammo) / 5); G.reload = 0.5 + clips * 1.3; sfx.reload(clips); }
+
+function resolveImpact(imp) {
+  if (!G) return;
+  const h = imp.hit;
+  if (h && h.e.alive) { kill(h.e, h.zone, imp); return; }
+  if (isFinite(imp.d)) {
+    const s = ps(imp.d);
+    G.fx.push({ kind: 'dust', x: imp.x, y: imp.y, r: 0.5 * s, t: 0, life: 1.1, d: imp.d });
+  }
+}
+function kill(e, zone, imp) {
+  const head = zone === 'head', vital = head || zone === 'chest', already = !!e.counted;
+  const label = e.type === 'runner' ? 'Runner' : e.officer ? 'Officer' : e.type === 'sniper' ? 'Marksman' : 'Rifleman';
+  G.hits++; if (head) G.heads++;
+  if (!already) { G.kills++; e.counted = true; if (e.officer) G.officersKilled++; if (e.type === 'sniper') G.sniperDead = true; }
+  bleed(e, zone, imp);
+  if (head && !e.noHelmet) {
+    e.noHelmet = true;
+    if (!e.officer) G.props.push({ kind: 'helmet', x: e.x, y: curBase(e) - 1.72 * e.s, vx: rand(-1.3, 1.3) * e.s, vy: -rand(1.6, 2.8) * e.s, rot: 0, vr: rand(-10, 10),
+      floor: e.clip ? (e.type === 'peek' ? gy(e.d - 9) : gy(e.d - 0.6)) : e.base, s: e.s, d: e.d, layer: e.clip && e.d >= 335 ? 0 : e.layer, col: e.cols.helm, bounced: 0 });
+  }
+  let pts, status;
+  if (!e.clip && !vital && !already) {
+    e.wounded = true; e.state = 'wounded'; e.dt = 0; e.canFire = false; e.bleedT = rand(10, 18); e.crawlT = rand(3, 7); e.lieDir = -(e.dir || 1);
+    pts = 60 + Math.round(e.d / 6); status = zone === 'legs' ? 'leg wound, out of action' : 'gut wound, out of action';
+  } else {
+    e.alive = false; e.wounded = false;
+    if (already) { e.state = 'dead'; e.dt = 0; pts = 40; status = 'finished off'; }
+    else {
+      e.state = 'dying'; e.dt = 0; e.fallDur = head ? 0.32 : 0.7;
+      pts = 100 + Math.round(e.d / 4) + (head ? 75 : zone === 'chest' ? 25 : 0);
+      status = head ? 'headshot' : zone === 'chest' ? 'heart-lung shot' : 'hit, down';
+      if (e.clip) e.death = (e.type === 'sniper' || Math.random() < (e.type === 'peek' ? 0.45 : 0.55)) ? 'drape' : 'back';
+    }
+  }
+  if (!already && e.officer) pts *= 2;
+  if (!already && e.type === 'sniper') pts += 300;
+  G.score += pts; G.longest = Math.max(G.longest, e.d);
+  G.texts.push({ x: e.x, y: curBase(e) - 2 * e.s, t: 0, txt: `+${pts}`, sub: head ? 'Headshot' : '' });
+  toast(`${label} · ${Math.round(e.d)} m · ${status}`);
+  sfx.thud(e.d / 343);
+  for (const o of G.enemies) if (o !== e && o.alive && !o.wounded && o.hideable && Math.abs(o.x - e.x) < 380 && Math.random() < 0.7) { o.alert = true; o.upT = Math.min(o.upT, rand(0.15, 0.5)); o.pops = (o.pops || 0) + 1; }
+  checkWin();
+}
+
+function checkWin() {
+  const M = G.M;
+  if (M.endless) return;
+  if (G.kills >= M.kills && G.sniperDead && (!M.officers || G.officersKilled >= M.officers)) endMission(true);
+}
+function endMission(win, reason) {
+  if (G.ended) return;
+  G.ended = true; G.outcome = win; G.reason = reason || ''; G.endT = 1.6;
+  if (win) sfx.win();
+}
+
+// ================= input =================
+let drag = null;
+cvs.addEventListener('pointerdown', e => {
+  initAudio();
+  if (mode === 'play' && G && G.kc) { G.kc = null; $('hud').classList.remove('kc'); return; }
+  if (mode !== 'play' || drag) return;
+  drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  try { cvs.setPointerCapture(e.pointerId); } catch (_) { }
+  if (e.pointerType === 'mouse' && e.button === 2) { toggleScope(); drag = null; }
+});
+cvs.addEventListener('pointermove', e => {
+  if (!drag || e.pointerId !== drag.id || mode !== 'play') return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+  const z = curZ(), sens = G.scoped ? 0.55 : 1.15;
+  cam.x += dx / z * sens; cam.y += dy / z * sens;
+  clampCam();
+});
+const endDrag = e => { if (drag && e.pointerId === drag.id) drag = null; };
+cvs.addEventListener('pointerup', endDrag); cvs.addEventListener('pointercancel', endDrag);
+cvs.addEventListener('contextmenu', e => e.preventDefault());
+cvs.addEventListener('wheel', e => { if (mode !== 'play') return; e.preventDefault(); if ((e.deltaY < 0) !== G.scoped) toggleScope(); }, { passive: false });
+
+const fireBtn = $('fireBtn');
+let firePtr = null;
+fireBtn.addEventListener('pointerdown', e => { e.preventDefault(); initAudio(); if (mode !== 'play') return; firePtr = e.pointerId; try { fireBtn.setPointerCapture(e.pointerId); } catch (_) { } G.firing = true; G.pressT = 0; fireBtn.classList.add('held'); });
+fireBtn.addEventListener('pointerup', e => { if (e.pointerId !== firePtr) return; firePtr = null; fireBtn.classList.remove('held'); if (G) { G.firing = false; shoot(); } });
+fireBtn.addEventListener('pointercancel', e => { if (e.pointerId !== firePtr) return; firePtr = null; fireBtn.classList.remove('held'); if (G) G.firing = false; });
+fireBtn.addEventListener('contextmenu', e => e.preventDefault());
+$('scopeBtn').addEventListener('pointerdown', e => { e.preventDefault(); initAudio(); toggleScope(); });
+$('coverBtn').addEventListener('pointerdown', e => { e.preventDefault(); toggleCover(); });
+function toggleCover() {
+  if (mode !== 'play' || !G || G.kc || G.ended) return;
+  G.cover = !G.cover; G.firing = false;
+  if (G.cover) { G.scoped = false; $('scopeBtn').classList.remove('on'); }
+  nz(0, 0.3, 'lowpass', 500, 0.35, 0.02);
+}
+$('reloadBtn').addEventListener('pointerdown', e => { e.preventDefault(); startReload(); });
+function toggleScope() { if (mode !== 'play' || !G || G.cover || G.kc) return; G.scoped = !G.scoped; $('scopeBtn').classList.toggle('on', G.scoped); nz(0, 0.06, 'bandpass', 900, 0.15, 0.005, 3); }
+
+const keys = {};
+window.addEventListener('keydown', e => {
+  if (mode !== 'play') { if (e.code === 'Escape' && mode === 'pause') resume(); return; }
+  if (keys[e.code]) return; keys[e.code] = true;
+  if (e.code === 'Space') { e.preventDefault(); initAudio(); G.firing = true; G.pressT = 0; }
+  if (e.code === 'KeyE' || e.code === 'ShiftLeft' || e.code === 'KeyZ') toggleScope();
+  if (e.code === 'KeyR') startReload();
+  if (e.code === 'KeyC') toggleCover();
+  if (e.code === 'Escape' || e.code === 'KeyP') pauseGame();
+});
+window.addEventListener('keyup', e => {
+  keys[e.code] = false;
+  if (mode === 'play' && e.code === 'Space' && G && G.firing) { G.firing = false; shoot(); }
+});
+
+function curZ() { return lerp(Z0, ZS, G ? easeZ(G.zt) : 0); }
+function easeZ(t) { return t * t * (3 - 2 * t); }
+function clampCam() {
+  const z = curZ(), hw = W / 2 / z, hh = H / 2 / z;
+  const mx = Math.min(hw, WW / 2), my = Math.min(hh, WH / 2);
+  cam.x = clamp(cam.x, G && G.zt > 0.5 ? 40 : mx, WW - (G && G.zt > 0.5 ? 40 : mx));
+  cam.y = clamp(cam.y, G && G.zt > 0.5 ? 120 : my, WH - (G && G.zt > 0.5 ? 40 : my));
+}
+
+// ================= update =================
+function update(dt) {
+  if (mode === 'menu' || mode === 'brief' || (mode === 'result' && !G)) { attract += dt; return; }
+  if (mode !== 'play' || !G) return;
+  G.time += dt;
+  if (G.kc) { G.kc.t += dt; if (G.kc.t > G.kc.tf + 0.6) { G.kc = null; $('hud').classList.remove('kc'); } }
+  if (!G.ended && isFinite(G.clock)) { G.clock -= dt; if (G.clock <= 0) { G.clock = 0; endMission(false, 'Time ran out before the objective was complete.'); } }
+  if (!G.ended && G.M.officers && G.officersEscaped >= 2) endMission(false, 'Two officers reached the command post.');
+  G.wind = lerp(G.wind, windAt(G.time), 1 - Math.exp(-dt * 2));
+  // breath
+  if (G.firing) G.pressT += dt;
+  G.steady = G.firing && G.pressT > 0.12 && G.stamina > 0 && G.exhausted <= 0;
+  if (G.steady) { G.stamina -= dt * 0.3; if (G.stamina <= 0) { G.stamina = 0; G.exhausted = 2.2; } }
+  else { G.exhausted = Math.max(0, G.exhausted - dt); G.stamina = Math.min(1, G.stamina + dt * (G.exhausted > 0 ? 0.08 : 0.2)); }
+  let target = G.scoped ? 2.0 : 3.2;
+  if (G.steady) target *= 0.1;
+  if (G.exhausted > 0) target *= 2.0;
+  target *= 1 + G.hurt * 1.8;
+  if (G.vet) target *= 1.2;
+  G.swayA = lerp(G.swayA, target, 1 - Math.exp(-dt * (G.steady ? 6 : 3)));
+  G.swayT += dt * (G.exhausted > 0 ? 1.8 : G.steady ? 0.5 : 1);
+  G.recoil = Math.max(0, G.recoil - dt * 28);
+  G.hurt = Math.max(0, G.hurt - dt * 0.7); G.shake = Math.max(0, G.shake - dt * 2.5);
+  G.zt = clamp(G.zt + (G.scoped ? dt : -dt) / 0.18, 0, 1);
+  G.coverT = clamp(G.coverT + (G.cover ? dt : -dt) / 0.3, 0, 1);
+  G.exposure = Math.max(0, G.exposure - dt * (G.cover ? 0.1 : 0.03));
+  clampCam();
+  if (G.bolt > 0) G.bolt -= dt;
+  if (G.reload > 0) { G.reload -= dt; if (G.reload <= 0) { G.reload = 0; G.ammo = MAG; } }
+  // timers
+  for (const t of G.timers) t.t -= dt;
+  const due = G.timers.filter(t => t.t <= 0); G.timers = G.timers.filter(t => t.t > 0);
+  due.forEach(t => t.fn());
+  if (!G) return;
+  if (!G.ended) spawnTick(dt);
+  updateEnemies(dt);
+  for (const p of G.drops) {
+    p.vy += 9.8 * ps(p.d) * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.y >= p.floor) { p.done = true; if (Math.random() < 0.6) addDecal(p.x, p.floor, p.r * 1.8, p.d, p.layer, null); }
+  }
+  G.drops = G.drops.filter(p => !p.done);
+  for (const p of G.props) {
+    if (p.rest) continue;
+    p.vy += 9.8 * ps(p.d) * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+    if (p.y >= p.floor) {
+      p.y = p.floor;
+      if (p.bounced++ < 1 && p.vy > p.s) { p.vy *= -0.3; p.vx *= 0.5; p.vr *= 0.5; }
+      else { p.rest = true; p.rot = p.kind === 'rifle' ? 0 : (Math.random() < 0.5 ? 0 : Math.PI); }
+    }
+  }
+  // fx
+  for (const f of G.fx) f.t += dt; G.fx = G.fx.filter(f => f.t < f.life);
+  for (const t of G.tracers) t.t += dt; G.tracers = G.tracers.filter(t => t.t < t.tf + 0.25);
+  for (const t of G.texts) t.t += dt; G.texts = G.texts.filter(t => t.t < 1.6);
+  for (const t of G.threat) t.t -= dt; G.threat = G.threat.filter(t => t.t > 0);
+  // smoke
+  G.smokeT -= dt;
+  if (G.smokeT <= 0) { G.smokeT = 0.18; for (const s of LAY.smokes) G.smoke.push({ x: s.x + rand(-2, 2), y: s.y, d: s.d, t: 0, life: rand(5, 7), r0: rand(0.6, 1) }); }
+  for (const p of G.smoke) { const s = ps(p.d); p.t += dt; p.x += G.wind * 0.9 * s * dt; p.y -= 1.3 * s * dt; }
+  G.smoke = G.smoke.filter(p => p.t < p.life);
+  G.rumbleT -= dt; if (G.rumbleT <= 0) { Math.random() < 0.5 ? sfx.rumble() : sfx.mg(); G.rumbleT = rand(7, 18); }
+  // end of mission
+  if (G.ended) { G.endT -= dt; if (G.endT <= 0) showResult(); }
+  G.hudT -= dt; if (G.hudT <= 0) { G.hudT = 0.1; updateHud(); }
+}
+
+// ================= rendering =================
+function render() {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const pal = P || (setTime('noon'), P);
+  ctx.fillStyle = pal.skyTop; ctx.fillRect(0, 0, W, H);
+  if (!layers.back) return;
+  if (mode !== 'play' && mode !== 'pause' && !(mode === 'result' && G)) {
+    // attract: slow pan across the village
+    const z = Math.max(Z0, H / 700);
+    const rc = { x: 1600 + Math.sin(attract * 0.05) * Math.max(0, WW / 2 - W / 2 / z - 10), y: Math.min(WH - H / 2 / z, 470) };
+    drawWorld(rc, z, false);
+    return;
+  }
+  if (G.kc) { renderKillcam(); return; }
+  const z = curZ();
+  const sw = getSway();
+  const shx = (Math.random() - 0.5) * G.shake * 8, shy = (Math.random() - 0.5) * G.shake * 8;
+  const scopedView = G.zt > 0.02;
+  let rc;
+  if (scopedView) rc = { x: cam.x + sw.x * easeZ(G.zt) - shx / z, y: cam.y + (sw.y - G.recoil) * easeZ(G.zt) - shy / z };
+  else rc = { x: cam.x - shx / z, y: cam.y - shy / z };
+  const r = scopeR();
+  if (G.zt >= 0.98) { ctx.save(); ctx.beginPath(); ctx.arc(W / 2, H / 2, r, 0, TAU); ctx.clip(); drawWorld(rc, z, true); ctx.restore(); }
+  else drawWorld(rc, z, true);
+  // screen-space overlays
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const toScr = (x, y) => ({ x: W / 2 + (x - rc.x) * z, y: H / 2 + (y - rc.y) * z });
+  // tracers
+  for (const t of G.tracers) {
+    const k = clamp(t.t / t.tf, 0, 1);
+    const a = toScr(t.ax, t.ay), b = toScr(t.x, t.y);
+    const sx = W / 2 + (a.x - W / 2) * 0.2, sy = H * 0.98;
+    const cx = (sx + b.x) / 2, cy = Math.min(sy, b.y) - (b.y - a.y) * 1.2 - 20;
+    const q = (u) => ({ x: (1 - u) ** 2 * sx + 2 * (1 - u) * u * cx + u * u * b.x, y: (1 - u) ** 2 * sy + 2 * (1 - u) * u * cy + u * u * b.y });
+    ctx.strokeStyle = `rgba(235,225,200,${0.35 * (1 - Math.max(0, t.t - t.tf) / 0.25)})`; ctx.lineWidth = 1.5;
+    ctx.beginPath(); const u0 = Math.max(0, k - 0.35);
+    for (let u = u0; u <= k + 0.001; u += 0.04) { const p = q(u); u === u0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y); }
+    ctx.stroke();
+  }
+  // floating score
+  ctx.textAlign = 'center';
+  for (const t of G.texts) {
+    const p = toScr(t.x, t.y); const a = 1 - t.t / 1.6;
+    ctx.font = `600 ${15}px 'IBM Plex Mono', monospace`; ctx.fillStyle = `rgba(240,214,150,${a})`;
+    ctx.fillText(t.txt, p.x, p.y - t.t * 30);
+    if (t.sub) { ctx.font = `13px 'Special Elite', monospace`; ctx.fillText(t.sub, p.x, p.y - t.t * 30 + 16); }
+  }
+  // sniper glint (screen sized so you can spot it unscoped)
+  const sn = G.enemies.find(e => e.type === 'sniper' && e.alive && e.state === 'up');
+  if (sn && sn.glint < 0.45) {
+    const p = toScr(sn.x + 0.03 * sn.s, curBase(sn) - 1.55 * sn.s), k = Math.sin(sn.glint / 0.45 * Math.PI);
+    const L = 4 + 7 * k;
+    ctx.strokeStyle = `rgba(255,248,220,${0.9 * k})`; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(p.x - L, p.y); ctx.lineTo(p.x + L, p.y); ctx.moveTo(p.x, p.y - L); ctx.lineTo(p.x, p.y + L); ctx.stroke();
+    ctx.fillStyle = `rgba(255,252,235,${k})`; ctx.beginPath(); ctx.arc(p.x, p.y, 1.8, 0, TAU); ctx.fill();
+  }
+  if (G.zt > 0.02) drawScope(z, G.zt, rc);
+  if (G.zt < 0.98) drawCrosshair(sw, z, 1 - G.zt);
+  drawIndicators(rc, z);
+  // cover: hayloft planks come up in front of you
+  if (G.coverT > 0) {
+    const top = H * (1 - 0.94 * easeZ(G.coverT));
+    ctx.fillStyle = '#2b2119'; ctx.fillRect(0, top, W, H - top);
+    for (let y = top; y < H; y += 38) { ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(0, y, W, 3); ctx.fillStyle = 'rgba(150,110,70,.1)'; ctx.fillRect(0, y + 3, W, 9); }
+    ctx.fillStyle = 'rgba(0,0,0,.5)'; for (let x = 0.17; x < 1; x += 0.29) ctx.fillRect(W * x, top, 3, H - top);
+    if (G.coverT > 0.9) { ctx.fillStyle = 'rgba(236,227,204,.75)'; ctx.font = "15px 'Special Elite', monospace"; ctx.textAlign = 'center'; ctx.fillText('In cover · they are losing your position', W / 2, H * 0.45); }
+  }
+  // damage vignette
+  if (G.hurt > 0 || G.health < 35) {
+    const a = Math.max(G.hurt * 0.55, G.health < 35 ? 0.18 + 0.08 * Math.sin(G.time * 4) : 0);
+    const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75);
+    g.addColorStop(0, 'rgba(120,10,0,0)'); g.addColorStop(1, `rgba(120,10,0,${a})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  if (G.ended) { ctx.fillStyle = `rgba(10,12,9,${0.6 * (1 - G.endT / 1.6)})`; ctx.fillRect(0, 0, W, H); }
+}
+function drawWorld(rc, z, live) {
+  const tx = W / 2 - rc.x * z, ty = H / 2 - rc.y * z;
+  ctx.setTransform(DPR * z, 0, 0, DPR * z, DPR * tx, DPR * ty);
+  ctx.imageSmoothingEnabled = true;
+  // below-ground fill for very tall screens
+  ctx.fillStyle = shade(P.ground, 80, 0.8); ctx.fillRect(-2000, WH - 2, WW + 4000, 2000);
+  ctx.fillStyle = P.skyTop; ctx.fillRect(-2000, -2000, WW + 4000, 2000);
+  ctx.fillStyle = P.skyBot; ctx.fillRect(-2000, 0, 2000, WH); ctx.fillRect(WW, 0, 2000, WH);
+  const dl = (k) => { const [y0, y1] = BANDS[k]; ctx.drawImage(layers[k], 0, y0, WW, y1 - y0); };
+  dl('back');
+  if (live && G) { drawEnemies(0); drawFlag(); }
+  else drawFlag(true);
+  dl('mid');
+  if (live && G) { drawSmoke(); drawEnemies(1); }
+  dl('front');
+  if (live && G) { drawEnemies(2); drawFx(); }
+}
+function drawFlag(still) {
+  const d = 318, s = ps(d), x = 1600 - 17 * K / d, b = gy(d), top = b - 7.4 * s;
+  ctx.strokeStyle = shade('#3a3026', d); ctx.lineWidth = 0.18 * s;
+  ctx.beginPath(); ctx.moveTo(x, b); ctx.lineTo(x, top - 0.2 * s); ctx.stroke();
+  const w = still || !G ? 1.5 : G.wind;
+  const ang = clamp(Math.abs(w) / 4.5, 0.22, 1) * Math.PI / 2; // small = hanging limp, PI/2 = straight out
+  const dir = w >= 0 ? 1 : -1, t = G ? G.time : attract;
+  const L = 1.8 * s, Hh = 0.9 * s, vx = dir * Math.sin(ang), vy = Math.cos(ang);
+  const amp = 0.14 * s * (0.3 + Math.min(1, Math.abs(w) / 4));
+  ctx.fillStyle = shade('#d9d2bd', d, 0.9);
+  ctx.beginPath(); ctx.moveTo(x, top);
+  const n = 8;
+  for (let i = 1; i <= n; i++) { const u = i / n, wv = Math.sin(t * 6 - u * 5) * amp * u; ctx.lineTo(x + vx * L * u, top + vy * L * u + wv); }
+  for (let i = n; i >= 0; i--) { const u = i / n, wv = Math.sin(t * 6 - u * 5 + 0.5) * amp * u; ctx.lineTo(x + vx * L * u, top + Hh + vy * L * u + wv); }
+  ctx.closePath(); ctx.fill();
+}
+function drawSmoke() {
+  for (const p of G.smoke) {
+    const s = ps(p.d), k = p.t / p.life;
+    ctx.fillStyle = shade(P.key === 'dusk' ? '#2e2a2a' : '#4a4a46', p.d, 1, 0.32 * (1 - k));
+    ctx.beginPath(); ctx.arc(p.x, p.y, (p.r0 + k * 3.2) * s, 0, TAU); ctx.fill();
+  }
+}
+function drawEnemies(layer) {
+  for (const dc of G.decals) if (dc.layer === layer) drawDecal(dc);
+  for (const e of G.enemies) if (e.layer === layer && (e.state === 'dead' || e.state === 'wounded')) drawSoldier(e);
+  for (const e of G.enemies) if (e.layer === layer && e.state !== 'dead' && e.state !== 'wounded') drawSoldier(e);
+  for (const p of G.props) if (p.layer === layer) drawProp(p);
+  for (const p of G.drops) if (p.layer === layer) { ctx.fillStyle = p.col; ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(0.35, p.r), 0, TAU); ctx.fill(); }
+}
+function drawDecal(dc) {
+  ctx.save();
+  if (dc.clip) { ctx.beginPath(); ctx.rect(dc.clip.x0, dc.clip.y0, dc.clip.x1 - dc.clip.x0, dc.clip.y1 - dc.clip.y0); ctx.clip(); }
+  ctx.fillStyle = dc.col; ctx.beginPath();
+  for (const [dx, dy, r] of dc.pts) { ctx.moveTo(dc.x + dx + r, dc.y + dy); ctx.ellipse(dc.x + dx, dc.y + dy, r, dc.flat ? r * 0.35 : r, 0, 0, TAU); }
+  ctx.fill();
+  if (dc.drip) ctx.fillRect(dc.x - dc.drip * 0.08, dc.y, dc.drip * 0.16, dc.drip * 1.6);
+  ctx.restore();
+}
+function drawProp(p) {
+  ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.scale(p.s, p.s);
+  if (p.kind === 'rifle') {
+    ctx.lineCap = 'round'; ctx.strokeStyle = p.col; ctx.lineWidth = 0.07; ctx.beginPath(); ctx.moveTo(-0.55, -0.03); ctx.lineTo(0.25, -0.03); ctx.stroke();
+    ctx.strokeStyle = '#1b1a18'; ctx.lineWidth = 0.03; ctx.beginPath(); ctx.moveTo(0.2, -0.03); ctx.lineTo(0.62, -0.03); ctx.stroke();
+  } else {
+    ctx.fillStyle = p.col; ctx.beginPath(); ctx.moveTo(-0.19, 0); ctx.lineTo(-0.14, -0.07); ctx.bezierCurveTo(-0.14, -0.28, 0.14, -0.28, 0.14, -0.07); ctx.lineTo(0.19, 0); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawDraped(e) {
+  // slumped forward over the sill or wall: back and helmet above, head and arms hanging down the outside
+  const s = e.s, C = e.cols;
+  ctx.save(); ctx.translate(e.x, e.clip.y1); ctx.scale(s, s);
+  if (save.gore) {
+    const L = 0.15 + Math.min(1.7, e.dt * 0.08);
+    ctx.fillStyle = C.blood; ctx.fillRect(-0.035, 0.12, 0.07, L); ctx.beginPath(); ctx.arc(0, 0.12 + L, 0.045, 0, TAU); ctx.fill();
+    ctx.fillRect(0.12, 0.6, 0.04, Math.min(0.9, e.dt * 0.04));
+  }
+  ctx.fillStyle = C.uni; ctx.beginPath(); ctx.moveTo(-0.28, 0.04); ctx.lineTo(-0.23, -0.2); ctx.quadraticCurveTo(0, -0.3, 0.23, -0.2); ctx.lineTo(0.28, 0.04); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = C.pack; ctx.fillRect(-0.12, -0.24, 0.24, 0.1);
+  ctx.strokeStyle = C.uni; ctx.lineWidth = 0.11; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-0.23, 0.02); ctx.lineTo(-0.27, 0.58); ctx.moveTo(0.23, 0.02); ctx.lineTo(0.17, 0.62); ctx.stroke();
+  ctx.fillStyle = C.skin; ctx.beginPath(); ctx.arc(-0.27, 0.62, 0.05, 0, TAU); ctx.arc(0.17, 0.66, 0.05, 0, TAU); ctx.fill();
+  if (e.noHelmet) {
+    ctx.fillStyle = C.hair; ctx.beginPath(); ctx.ellipse(0, 0.12, 0.11, 0.12, 0, 0, TAU); ctx.fill();
+    if (save.gore) { ctx.fillStyle = C.wound; ctx.beginPath(); ctx.ellipse(0.02, 0.1, 0.05, 0.045, 0, 0, TAU); ctx.fill(); }
+  } else { ctx.fillStyle = C.helm; ctx.beginPath(); ctx.ellipse(0, 0.12, 0.17, 0.14, 0, 0, TAU); ctx.fill(); }
+  ctx.restore();
+}
+function renderKillcam() {
+  const kc = G.kc, u = clamp(kc.t / kc.tf, 0, 1), post = Math.max(0, kc.t - kc.tf);
+  const e2 = u * u, sm = u * u * (3 - 2 * u);
+  const cx = lerp(kc.ax, kc.px, e2), cy = lerp(kc.ay, kc.py, e2);
+  const z = ZS * (lerp(1, 3.4, sm) + post * 0.6);
+  drawWorld({ x: cx, y: cy }, z, true);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const X = W / 2, Y = H / 2;
+  if (u < 1) {
+    for (let i = 0; i < 5; i++) {
+      const k = (kc.t * 9 + i / 5) % 1;
+      ctx.strokeStyle = `rgba(255,255,255,${0.16 * (1 - k)})`; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(X, Y, lerp(18, 4, u) + k * 70 * (1 - u * 0.6), 0, TAU); ctx.stroke();
+    }
+    const r = lerp(16, 3, u);
+    const g = ctx.createRadialGradient(X - r * 0.3, Y - r * 0.3, r * 0.1, X, Y, r);
+    g.addColorStop(0, '#f3c58a'); g.addColorStop(0.6, '#b8743a'); g.addColorStop(1, '#5a3215');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(X, Y, r, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(30,15,5,.8)'; ctx.lineWidth = Math.max(1, r * 0.12);
+    ctx.beginPath(); ctx.arc(X, Y, r * 0.55, 0, TAU); ctx.stroke();
+    const a = kc.t * 60; ctx.beginPath(); ctx.moveTo(X + Math.cos(a) * r * 0.2, Y + Math.sin(a) * r * 0.2); ctx.lineTo(X + Math.cos(a) * r * 0.9, Y + Math.sin(a) * r * 0.9); ctx.stroke();
+  }
+  const vg = ctx.createRadialGradient(X, Y, Math.min(W, H) * 0.25, X, Y, Math.max(W, H) * 0.7);
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.6)');
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  const bh = Math.round(H * 0.1); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, bh); ctx.fillRect(0, H - bh, W, bh);
+  ctx.fillStyle = 'rgba(236,227,204,.9)'; ctx.font = "13px 'Special Elite', monospace"; ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left'; ctx.fillText(`${Math.round(kc.e.d)} m · ${kc.zone === 'head' ? 'headshot' : 'heart-lung shot'} · ${kc.tf.toFixed(2)} s in flight`, 16, H - bh / 2);
+  ctx.textAlign = 'right'; ctx.fillText('Tap to skip', W - 16, H - bh / 2);
+  ctx.textBaseline = 'alphabetic';
+}
+
+function drawSoldier(e) {
+  if (e.draped) { drawDraped(e); return; }
+  const s = e.s, b = curBase(e), C = e.cols;
+  ctx.save();
+  if (e.clip) { ctx.beginPath(); ctx.rect(e.clip.x0, e.clip.y0, e.clip.x1 - e.clip.x0, e.clip.y1 - e.clip.y0); ctx.clip(); }
+  ctx.translate(e.x, b);
+  const lying = !e.clip && (e.state === 'dying' || e.state === 'dead' || e.state === 'wounded');
+  if (lying && save.gore && e.state !== 'dying') {
+    const pr = Math.min(e.state === 'dead' ? 1.15 : 0.6, 0.15 + e.dt * 0.05) * s;
+    ctx.fillStyle = C.blood; ctx.beginPath(); ctx.ellipse(-(e.dir || 1) * 1.0 * s, 0.03 * s, pr * 1.3, pr * 0.3, 0, 0, TAU); ctx.fill();
+  }
+  ctx.scale(s, s);
+  if (lying) {
+    const k = e.state === 'dying' ? Math.min(1, e.dt / (e.fallDur || 0.6)) : 1;
+    let ang = -(e.dir || 1) * k * k * Math.PI / 2 * 0.97;
+    if (e.state === 'wounded') ang += Math.sin(e.dt * 4) * 0.05;
+    ctx.rotate(ang);
+  }
+  if (e.vx) drawWalker(e, C); else drawFacing(e, C);
+  ctx.restore();
+}
+
+function drawFacing(e, C) {
+  const aim = e.alert || (e.canFire && e.fireT < 1.3) || e.type === 'sniper';
+  // legs
+  ctx.fillStyle = C.dark; ctx.fillRect(-0.19, -0.88, 0.16, 0.88); ctx.fillRect(0.03, -0.88, 0.16, 0.88);
+  ctx.fillStyle = C.boot; ctx.fillRect(-0.21, -0.14, 0.19, 0.14); ctx.fillRect(0.02, -0.14, 0.19, 0.14);
+  // torso
+  ctx.fillStyle = C.uni; ctx.beginPath(); ctx.moveTo(-0.21, -0.86); ctx.lineTo(0.21, -0.86); ctx.lineTo(0.25, -1.44); ctx.lineTo(-0.25, -1.44); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = C.belt; ctx.fillRect(-0.22, -0.95, 0.44, 0.06);
+  ctx.fillStyle = C.dark; ctx.fillRect(-0.18, -1.05, 0.1, 0.09); ctx.fillRect(0.08, -1.05, 0.1, 0.09);
+  // neck & head
+  ctx.fillStyle = C.skin; ctx.fillRect(-0.05, -1.52, 0.1, 0.1);
+  ctx.beginPath(); ctx.arc(0, -1.6, 0.11, 0, TAU); ctx.fill();
+  if (aim) {
+    // arms up, rifle at shoulder pointing at you
+    ctx.strokeStyle = C.uni; ctx.lineWidth = 0.1; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-0.22, -1.38); ctx.lineTo(-0.06, -1.32); ctx.moveTo(0.22, -1.38); ctx.lineTo(0.1, -1.47); ctx.stroke();
+    ctx.fillStyle = C.wood; ctx.fillRect(0.02, -1.56, 0.07, 0.3);
+    ctx.fillStyle = '#0b0a08'; ctx.beginPath(); ctx.arc(0.055, -1.52, 0.035, 0, TAU); ctx.fill();
+    if (e.type === 'sniper') { ctx.fillStyle = C.belt; ctx.fillRect(0.0, -1.68, 0.11, 0.06); }
+  } else {
+    ctx.strokeStyle = C.wood; ctx.lineWidth = 0.05;
+    ctx.beginPath(); ctx.moveTo(-0.27, -0.95); ctx.lineTo(0.27, -1.6); ctx.stroke();
+    ctx.strokeStyle = C.uni; ctx.lineWidth = 0.1; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-0.24, -1.4); ctx.lineTo(-0.16, -1.05); ctx.moveTo(0.24, -1.4); ctx.lineTo(0.14, -1.25); ctx.stroke();
+  }
+  // helmet (knocked off by a headshot)
+  if (e.noHelmet) { ctx.fillStyle = C.hair; ctx.beginPath(); ctx.arc(0, -1.63, 0.105, Math.PI, 0); ctx.fill(); if (save.gore) { ctx.fillStyle = C.wound; ctx.beginPath(); ctx.arc(0.02, -1.62, 0.05, 0, TAU); ctx.fill(); } } else {
+  ctx.fillStyle = C.helm; ctx.beginPath();
+  ctx.moveTo(-0.19, -1.55); ctx.lineTo(-0.14, -1.62); ctx.bezierCurveTo(-0.14, -1.83, 0.14, -1.83, 0.14, -1.62); ctx.lineTo(0.19, -1.55); ctx.lineTo(0.12, -1.585); ctx.lineTo(-0.12, -1.585); ctx.closePath(); ctx.fill();
+  }
+  if (e.flash > 0) {
+    ctx.fillStyle = 'rgba(255,220,140,0.95)'; ctx.beginPath();
+    for (let i = 0; i < 10; i++) { const a = i / 10 * TAU, r = i % 2 ? 0.12 : 0.38; ctx.lineTo(0.055 + Math.cos(a) * r, -1.52 + Math.sin(a) * r); }
+    ctx.fill();
+  }
+}
+function drawWalker(e, C) {
+  const dir = e.dir, ph = e.phase || 0, run = e.type === 'runner';
+  ctx.scale(dir, 1);
+  if (run) { ctx.translate(0, 0); }
+  const sw = Math.sin(ph) * (run ? 0.55 : 0.38);
+  // legs
+  ctx.fillStyle = C.dark;
+  for (const k of [1, -1]) { ctx.save(); ctx.translate(0, -0.86); ctx.rotate(sw * k); ctx.fillRect(-0.07, 0, 0.14, 0.78); ctx.fillStyle = C.boot; ctx.fillRect(-0.08, 0.7, 0.22, 0.12); ctx.restore(); ctx.fillStyle = C.dark; }
+  ctx.save();
+  if (run) { ctx.translate(0, -0.86); ctx.rotate(0.28); ctx.translate(0, 0.86); }
+  if (e.officer) {
+    ctx.fillStyle = C.uni; ctx.beginPath(); ctx.moveTo(-0.15, -0.62); ctx.lineTo(0.15, -0.62); ctx.lineTo(0.14, -1.46); ctx.lineTo(-0.14, -1.46); ctx.fill();
+    ctx.fillStyle = C.belt; ctx.fillRect(-0.15, -0.98, 0.3, 0.05); ctx.fillRect(-0.04, -1.0, 0.1, 0.12);
+  } else {
+    ctx.fillStyle = C.pack; ctx.fillRect(-0.27, -1.4, 0.14, 0.38);
+    ctx.fillStyle = C.uni; ctx.fillRect(-0.14, -1.46, 0.27, 0.62);
+    ctx.fillStyle = C.belt; ctx.fillRect(-0.14, -0.96, 0.27, 0.05);
+    ctx.strokeStyle = C.wood; ctx.lineWidth = 0.05; ctx.beginPath();
+    if (run) { ctx.moveTo(-0.1, -1.2); ctx.lineTo(0.55, -1.32); } else { ctx.moveTo(0.04, -0.98); ctx.lineTo(-0.2, -1.98); }
+    ctx.stroke();
+  }
+  // arm
+  ctx.strokeStyle = C.uni; ctx.lineWidth = 0.09; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(0, -1.38); ctx.lineTo(Math.sin(-sw) * 0.3 + (run ? 0.25 : 0), -1.0 - (run ? 0.2 : 0)); ctx.stroke();
+  // head
+  ctx.fillStyle = C.skin; ctx.beginPath(); ctx.arc(0.03, -1.6, 0.1, 0, TAU); ctx.fill();
+  if (e.officer) {
+    ctx.fillStyle = C.cap; ctx.beginPath(); ctx.moveTo(-0.1, -1.66); ctx.lineTo(-0.08, -1.78); ctx.lineTo(0.2, -1.8); ctx.lineTo(0.14, -1.66); ctx.fill();
+    ctx.fillStyle = C.belt; ctx.fillRect(0.08, -1.67, 0.12, 0.025);
+    ctx.fillStyle = C.trim; ctx.fillRect(-0.09, -1.7, 0.22, 0.02);
+  } else if (e.noHelmet) {
+    if (save.gore) { ctx.fillStyle = C.wound; ctx.beginPath(); ctx.arc(0.05, -1.62, 0.05, 0, TAU); ctx.fill(); }
+  } else {
+    ctx.fillStyle = C.helm; ctx.beginPath(); ctx.moveTo(-0.16, -1.56); ctx.lineTo(-0.12, -1.63); ctx.bezierCurveTo(-0.12, -1.82, 0.16, -1.82, 0.17, -1.64); ctx.lineTo(0.2, -1.6); ctx.lineTo(-0.16, -1.56); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawFx() {
+  for (const f of G.fx) {
+    const k = f.t / f.life;
+    if (f.kind === 'dust') {
+      ctx.fillStyle = shade('#8f8166', f.d, 1, 0.75 * (1 - k));
+      for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.arc(f.x + (i - 1.5) * f.r * 0.6 * (1 + k), f.y - k * f.r * 2 - i % 2 * f.r * 0.5, f.r * (0.6 + k * 1.6), 0, TAU); ctx.fill(); }
+      if (k < 0.1) { ctx.fillStyle = 'rgba(255,240,200,0.6)'; ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 0.4, 0, TAU); ctx.fill(); }
+    } else if (f.kind === 'mist') {
+      ctx.fillStyle = shade('#6e1510', f.d, 1, 0.6 * (1 - k));
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.r * (0.6 + k * 2), 0, TAU); ctx.fill();
+    }
+  }
+}
+function drawCrosshair(sw, z, a) {
+  const cx = W / 2 + sw.x * z, cy = H / 2 + (sw.y - G.recoil) * z;
+  ctx.strokeStyle = `rgba(240,232,210,${0.85 * a})`; ctx.lineWidth = 1.5;
+  const g = 6, L = 12;
+  ctx.beginPath();
+  ctx.moveTo(cx - g - L, cy); ctx.lineTo(cx - g, cy); ctx.moveTo(cx + g, cy); ctx.lineTo(cx + g + L, cy);
+  ctx.moveTo(cx, cy + g); ctx.lineTo(cx, cy + g + L); ctx.moveTo(cx, cy - g); ctx.lineTo(cx, cy - g - L * 0.6);
+  ctx.stroke();
+  ctx.fillStyle = `rgba(240,232,210,${0.9 * a})`; ctx.beginPath(); ctx.arc(cx, cy, 1.4, 0, TAU); ctx.fill();
+}
+function drawScope(z, zt, rc) {
+  const r = scopeR() * lerp(1.6, 1, easeZ(zt)), cx = W / 2, cy = H / 2, a = easeZ(zt);
+  // mask
+  ctx.fillStyle = `rgba(4,4,3,${a})`;
+  ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.arc(cx, cy, r, 0, TAU, true); ctx.fill();
+  // rim falloff
+  const g = ctx.createRadialGradient(cx, cy, r * 0.78, cx, cy, r);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.85, `rgba(0,0,0,${0.35 * a})`); g.addColorStop(1, `rgba(0,0,0,${0.95 * a})`);
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+  // lens tint
+  ctx.fillStyle = `rgba(255,236,190,${0.035 * a})`; ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+  if (zt < 0.6) return;
+  ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.clip();
+  const mil = 3.2 * z; // screen px per milliradian
+  const ink = '#0a0908', halo = 'rgba(235,225,200,0.28)';
+  const line = (x1, y1, x2, y2, w) => { ctx.lineWidth = w + 1.6; ctx.strokeStyle = halo; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); ctx.lineWidth = w; ctx.strokeStyle = ink; ctx.stroke(); };
+  // three heavy posts
+  const gap = mil * 6;
+  ctx.lineCap = 'butt';
+  line(cx - r, cy, cx - gap, cy, 5); line(cx + gap, cy, cx + r, cy, 5); line(cx, cy + mil * 9, cx, cy + r, 5);
+  // fine crosshair
+  line(cx - gap, cy, cx + gap, cy, 1); line(cx, cy - r * 0.55, cx, cy + mil * 9, 1);
+  // mil marks
+  ctx.font = `600 ${Math.max(9, mil * 0.85)}px 'IBM Plex Mono', monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  for (let i = 1; i <= 8; i++) {
+    if (i <= 5) { const L = i === 5 ? mil * 0.9 : mil * 0.5; line(cx + i * mil, cy - L / 2, cx + i * mil, cy + L / 2, 1); line(cx - i * mil, cy - L / 2, cx - i * mil, cy + L / 2, 1); }
+    const y = cy + i * mil, LL = i % 2 === 0 ? mil * 1.1 : mil * 0.65;
+    line(cx - LL / 2, y, cx + LL / 2, y, 1.2);
+    if (i % 2 === 0 && mil > 7) { ctx.fillStyle = halo; ctx.fillText(String(i), cx + LL / 2 + 4, y + 0.5); ctx.fillStyle = ink; ctx.fillText(String(i), cx + LL / 2 + 3, y); }
+  }
+  // Recruit: predicted impact marker
+  if (!G.vet) {
+    const info = aimInfo();
+    if (info && isFinite(info.d)) {
+      const B = ballistic(info.d, G.wind);
+      const px = cx + B.dx * z, py = cy + B.dy * z;
+      ctx.strokeStyle = 'rgba(214,70,40,0.95)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(px, py, 3.5, 0, TAU); ctx.stroke();
+      ctx.fillStyle = 'rgba(214,70,40,0.95)'; ctx.beginPath(); ctx.arc(px, py, 1, 0, TAU); ctx.fill();
+    }
+  }
+  ctx.restore();
+  // bolt / reload shade
+  if (G.bolt > 0.15 || G.reload > 0) {
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+  }
+}
+function aimInfo() {
+  const A = aimPoint();
+  // nearest exposed enemy within ~2.5 mils of the crosshair (or of its likely impact)
+  let best = null, bd = 1e9;
+  for (const e of G.enemies) {
+    if (!exposed(e)) continue;
+    const B = ballistic(e.d, G.wind);
+    const ex = e.x, ey = curBase(e) - 1.1 * e.s;
+    const dd = Math.min(Math.hypot(ex - A.x, ey - A.y), Math.hypot(ex - (A.x + B.dx), ey - (A.y + B.dy)));
+    if (dd < 3.2 * 3 && dd < bd) { bd = dd; best = e; }
+  }
+  if (best) return { d: best.d, enemy: true };
+  return { d: depthAt(A.x, A.y), enemy: false };
+}
+function drawIndicators(rc, z) {
+  const scoped = G.zt > 0.5, r = scopeR();
+  const list = [];
+  if (!G.vet) for (const e of G.enemies) if (exposed(e) && !e.wounded) list.push({ x: e.x, y: curBase(e) - 1.2 * e.s, col: e.officer ? '240,200,110' : e.type === 'sniper' ? '240,120,90' : '235,225,200', a: 0.75 });
+  for (const t of G.threat) list.push({ x: t.x, y: t.y, col: '230,80,50', a: Math.min(1, t.t) });
+  for (const it of list) {
+    const sx = W / 2 + (it.x - rc.x) * z, sy = H / 2 + (it.y - rc.y) * z;
+    let inside, ex, ey, ang;
+    if (scoped) {
+      const dx = sx - W / 2, dy = sy - H / 2, dist = Math.hypot(dx, dy);
+      inside = dist < r - 14; ang = Math.atan2(dy, dx);
+      ex = W / 2 + Math.cos(ang) * (r - 16); ey = H / 2 + Math.sin(ang) * (r - 16);
+    } else {
+      const m = 26;
+      inside = sx > m && sx < W - m && sy > m + 70 && sy < H - m;
+      ang = Math.atan2(sy - H / 2, sx - W / 2);
+      ex = clamp(sx, m, W - m); ey = clamp(sy, m + 70, H - m);
+    }
+    if (inside) continue;
+    ctx.save(); ctx.translate(ex, ey); ctx.rotate(ang);
+    ctx.fillStyle = `rgba(${it.col},${it.a})`;
+    ctx.beginPath(); ctx.moveTo(9, 0); ctx.lineTo(-5, -6); ctx.lineTo(-2, 0); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ================= HUD =================
+const ammoEl = $('ammo');
+function updateHud() {
+  const M = G.M;
+  const hb = $('hpbar'); hb.style.width = G.health + '%'; hb.classList.toggle('low', G.health < 35);
+  let h = '';
+  for (let i = 0; i < MAG; i++) h += `<span class="round${i < G.ammo ? '' : ' spent'}"></span>`;
+  h += G.reload > 0 ? '<small>Loading</small>' : G.bolt > 0.1 ? '<small>Bolt</small>' : '';
+  if (ammoEl.innerHTML !== h) ammoEl.innerHTML = h;
+  let obj = M.endless ? `Hits ${G.kills}` : `Targets ${Math.min(G.kills, M.kills)} / ${M.kills}`;
+  if (M.officers) obj += ` · Officers ${G.officersKilled} / ${M.officers}`;
+  if (M.sniper && G.sniperSpawned && !M.endless) obj += G.sniperDead ? ' · Tower clear' : ' · Tower marksman';
+  $('obj').textContent = obj;
+  const ck = $('clock');
+  if (isFinite(G.clock)) { const t = Math.ceil(G.clock); ck.textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; ck.classList.toggle('hot', t <= 30); }
+  else { const t = Math.floor(G.time); ck.textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; }
+  $('windVal').textContent = Math.abs(G.wind).toFixed(1);
+  $('windArrow').style.transform = `scaleX(${G.wind >= 0 ? 1 : -1})`;
+  $('score').textContent = G.score;
+  fireBtn.style.setProperty('--breath', G.stamina.toFixed(3));
+  fireBtn.classList.toggle('cycling', !canShoot());
+  $('reloadBtn').style.opacity = G.ammo < MAG && G.reload <= 0 ? 1 : 0.4;
+  const ex = G.exposure, xe = $('expo');
+  xe.textContent = G.cover ? 'In cover' : ex < 0.2 ? 'Concealed' : ex < 0.55 ? 'Suspected' : 'Spotted';
+  xe.className = 'expo ' + (G.cover ? 'c' : ex < 0.2 ? 'ok' : ex < 0.55 ? 'mid' : 'hot');
+  $('coverBtn').classList.toggle('on', G.cover);
+  const ro = $('readout');
+  if (G.zt > 0.9) {
+    const info = aimInfo();
+    if (G.vet) ro.textContent = 'Range by mils: a man is 1.75 m tall · metres = 1750 ÷ mils';
+    else if (isFinite(info.d) && info.d < 1500) {
+      const B = ballistic(info.d, G.wind);
+      const rng10 = Math.round(info.d / 10) * 10;
+      ro.textContent = `Range ${rng10} m · hold ${B.dropMil.toFixed(1)} mil high · ${Math.abs(B.driftMil).toFixed(1)} mil ${G.wind >= 0 ? 'left' : 'right'}`;
+    } else ro.textContent = 'Range — out of sight';
+    ro.hidden = false;
+  } else ro.hidden = true;
+  $('breathTip').style.opacity = G.time < 25 && !G.kc && !G.cover ? 0.75 : 0;
+}
+let toastTimer = 0;
+function toast(msg, bad) {
+  const t = $('toast'); t.textContent = msg; t.classList.toggle('bad', !!bad); t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+// ================= screens =================
+function showScreen(id) {
+  for (const s of ['gate', 'menu', 'brief', 'result', 'pause']) $(s).hidden = s !== id;
+  $('hud').hidden = !(id === null || id === 'pause');
+}
+function buildMenu() {
+  const ol = $('missionList'); ol.innerHTML = '';
+  [...MISSIONS, ENDLESS].forEach((M, i) => {
+    const li = document.createElement('li');
+    const b = document.createElement('button'); b.className = 'mbtn'; b.disabled = i + 1 > save.unlocked;
+    const best = save.best[i] ? `best ${save.best[i]}` : '';
+    const meta = M.endless ? 'Endless · survive as long as you can' :
+      `${M.kills} targets${M.officers ? ` incl. ${M.officers} officers` : ''}${M.sniper ? ' · tower marksman' : ''} · ${M.time / 60 | 0}:${String(M.time % 60).padStart(2, '0')} · wind ${M.wind[0]}–${M.wind[1]} m/s`;
+    b.innerHTML = `<span class="no">${M.endless ? '∞' : 'Nº' + (i + 1)}</span><span class="nm">${M.name}</span><span class="best">${b.disabled ? 'Locked' : best}</span><span class="meta">${meta}</span>`;
+    b.addEventListener('click', () => { initAudio(); openBrief(i); });
+    li.appendChild(b); ol.appendChild(li);
+  });
+  document.querySelectorAll('.seg button').forEach(btn => btn.setAttribute('aria-checked', String(btn.dataset.diff === save.diff)));
+  $('diffNote').textContent = save.diff === 'recruit'
+    ? 'Recruit: a red dot in the scope shows where the round will land. Arrows at the edge point to enemies.'
+    : 'Veteran: no impact dot and no enemy arrows. More sway, and enemies shoot straighter.';
+  setSound(save.sound);
+  $('goreBtn').textContent = 'Graphic violence: ' + (save.gore ? 'on' : 'off');
+  $('kcBtn').textContent = 'Kill cam: ' + (save.killcam ? 'on' : 'off');
+}
+$('goreBtn').addEventListener('click', () => { save.gore = !save.gore; persist(); buildMenu(); });
+$('kcBtn').addEventListener('click', () => { save.killcam = !save.killcam; persist(); buildMenu(); });
+$('gateYes').addEventListener('click', () => { initAudio(); save.adult = true; save.gore = true; persist(); buildMenu(); showScreen('menu'); });
+$('gateSoft').addEventListener('click', () => { initAudio(); save.adult = true; save.gore = false; persist(); buildMenu(); showScreen('menu'); });
+document.querySelectorAll('.seg button').forEach(btn => btn.addEventListener('click', () => { save.diff = btn.dataset.diff; persist(); buildMenu(); }));
+$('soundBtn').addEventListener('click', () => { initAudio(); setSound(!save.sound); });
+$('pSound').addEventListener('click', () => { setSound(!save.sound); });
+
+function openBrief(i) {
+  const M = i < MISSIONS.length ? MISSIONS[i] : ENDLESS;
+  curMission = i;
+  $('bHead').textContent = M.endless ? 'Last stand' : `Mission ${i + 1} of ${MISSIONS.length}`;
+  $('bTime').textContent = M.clockText;
+  $('bName').textContent = M.name;
+  $('bText').textContent = M.text;
+  const meta = [
+    ['Objective', M.endless ? 'Survive' : `${M.kills} targets${M.officers ? `, ${M.officers} officers` : ''}${M.sniper ? ', tower marksman' : ''}`],
+    ['Time', M.endless ? 'Unlimited' : `${M.time / 60 | 0} min ${M.time % 60 ? (M.time % 60) + ' s' : ''}`],
+    ['Wind', `${M.wind[0]}–${M.wind[1]} m/s`],
+    ['Range', '130–470 m'],
+  ];
+  $('bMeta').innerHTML = meta.map(([k, v]) => `<div><span class="lbl">${k}</span>${v}</div>`).join('');
+  $('bTip').textContent = M.tip;
+  prep(M.tod);
+  mode = 'brief'; showScreen('brief');
+}
+$('briefBack').addEventListener('click', () => { mode = 'menu'; buildMenu(); showScreen('menu'); });
+$('beginBtn').addEventListener('click', () => { initAudio(); startMission(curMission); });
+function startMission(i) {
+  newGame(i);
+  mode = 'play'; showScreen(null);
+  $('scopeBtn').classList.remove('on'); $('hud').classList.remove('kc');
+  resize(); updateHud();
+  toast(G.M.endless ? 'Hold the line.' : `${G.M.name}. Drag to aim, Scope to zoom.`);
+  try { navigator.wakeLock && navigator.wakeLock.request('screen').catch(() => { }); } catch (e) { }
+}
+function showResult() {
+  const M = G.M, win = G.outcome, i = curMission;
+  mode = 'result';
+  if (M.endless) {
+    $('rTitle').textContent = 'Line overrun'; $('rTitle').classList.add('fail');
+    $('rText').textContent = `You held for ${Math.floor(G.time / 60)} min ${Math.floor(G.time % 60)} s.`;
+  } else {
+    $('rTitle').textContent = win ? 'Mission complete' : 'Mission failed'; $('rTitle').classList.toggle('fail', !win);
+    $('rText').textContent = win ? 'Sector secured. Relief is moving up the road.' : G.reason;
+  }
+  if (win && i + 2 > save.unlocked) save.unlocked = Math.min(MISSIONS.length + 1, i + 2);
+  if ((win || M.endless) && (!save.best[i] || G.score > save.best[i])) save.best[i] = G.score;
+  persist();
+  const acc = G.shots ? Math.round(G.hits / G.shots * 100) : 0;
+  const stats = [['Score', G.score], ['Hits', G.kills], ['Accuracy', acc + '%'], ['Headshots', G.heads], ['Longest', G.longest ? Math.round(G.longest) + ' m' : '—'], ['Rounds fired', G.shots]];
+  $('rStats').innerHTML = stats.map(([k, v]) => `<div><span class="lbl">${k}</span>${v}</div>`).join('');
+  let rating = '';
+  if (win || M.endless) rating = acc >= 80 && G.heads >= 3 ? 'Rating: Expert marksman' : acc >= 60 ? 'Rating: Sharpshooter' : 'Rating: Marksman';
+  $('rRating').textContent = rating;
+  $('rMission').textContent = M.endless ? 'Last stand' : `Mission ${i + 1}`;
+  $('rDiff').textContent = G.vet ? 'Veteran' : 'Recruit';
+  const next = $('rNext');
+  next.hidden = !(win && i + 1 <= MISSIONS.length && !M.endless);
+  next.textContent = i + 1 === MISSIONS.length ? 'Last stand' : 'Next mission';
+  showScreen('result'); $('hud').hidden = true; $('rotate').hidden = true;
+}
+$('rNext').addEventListener('click', () => { openBrief(curMission + 1); });
+$('rRetry').addEventListener('click', () => { startMission(curMission); });
+$('rMenu').addEventListener('click', () => { G = null; mode = 'menu'; buildMenu(); showScreen('menu'); });
+function pauseGame() { if (mode !== 'play') return; mode = 'pause'; $('pMission').textContent = G.M.name; showScreen('pause'); G.firing = false; }
+function resume() { mode = 'play'; showScreen(null); }
+$('pauseBtn').addEventListener('click', pauseGame);
+$('pResume').addEventListener('click', resume);
+$('pRestart').addEventListener('click', () => startMission(curMission));
+$('pQuit').addEventListener('click', () => { G = null; mode = 'menu'; buildMenu(); showScreen('menu'); });
+$('rotateOk').addEventListener('click', () => { rotateDismissed = true; $('rotate').hidden = true; });
+document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'play') pauseGame(); });
+
+// ================= main loop =================
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  let sc = 1;
+  if (mode === 'play' && G && G.kc) sc = G.kc.t < G.kc.tf ? Math.max(0.05, G.kc.tf / 1.3) : 0.3; // slow motion
+  try { update(dt * sc); render(); } catch (err) { console.error(err); }
+  requestAnimationFrame(frame);
+}
+
+function boot() {
+  prep('noon'); resize(); buildMenu(); showScreen(save.adult ? 'menu' : 'gate');
+  requestAnimationFrame(frame);
+}
+window.__valmont = { get G() { return G; }, get mode() { return mode; }, startMission, shoot, cam, ballistic };
+boot();
+})();
+</script>
+<!--GAME-END-->
+</body>
+</html>

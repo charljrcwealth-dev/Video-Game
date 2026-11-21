@@ -1,27 +1,24 @@
 # Valmont 1944
 
-A realistic WWII sniper game for adults (18+) that runs in a phone browser. It's one HTML file with no install and no build step.
+A first-person WWII shooter for adults (18+) that runs in a phone browser. It's one HTML file built on three.js, with no install and no build step.
 
-**Content warning:** realistic war violence, including blood, gunshot wounds, wounded and dying soldiers, and bodies. You can turn graphic violence off in the menu.
+**Content warning:** realistic war violence, including gunfire, blood, explosions and soldiers dying. You can turn blood off in the menu.
 
 ## Play
-Open `index.html` in any modern browser. For the best view on a phone, turn it sideways. On iPhone you can tap Share, then Add to Home Screen, to open it full-screen.
+Open `index.html` in any modern browser with an internet connection (three.js and the fonts load from a CDN). Turn your phone sideways. On iPhone you can tap Share, then Add to Home Screen, to open it full-screen.
+
+## The fight
+Hold a ruined Normandy street against waves of enemy infantry. They advance from the far end and two side alleys, move from cover to cover, pop up to fire, rush you with submachine guns, lob grenades, and take rooftop positions.
+
+- Weapons: M1 Garand (semi-auto, 8 rounds, the clip pings out when empty) and M1A1 Thompson (automatic, 30 rounds), plus grenades
+- Aim down iron sights, with a crosshair that spreads as you move, hit markers, kill popups and a kill feed
+- Health comes back if you stay out of fire; the screen bleeds red when you're hurt; red arcs show where shots came from
+- Six kills in a row earns an artillery strike
+- Mature effects: blood spray, helmets knocked off by headshots, bodies thrown by explosions, blood pools
 
 ## Controls
-- **Drag** anywhere to aim
-- **Scope** zooms to 5×
-- **Hold Fire** to steady your breath. **Release** to shoot.
-- **Load** reloads early. The Lee-Enfield No. 4 (T) holds 10 rounds, loaded 5 at a time.
-- **Cover** drops you out of sight so the enemy loses your position
-- Desktop: drag the mouse to aim. Right-click or E toggles the scope, hold and release Space to fire, R reloads, Esc pauses.
+- **Phone:** left thumb moves (push to the top edge to sprint), right thumb looks, drag from Fire to aim while shooting. Buttons for Aim, Reload, Swap, Crouch and Grenade. Aiming snaps toward nearby enemies on Recruit and Regular.
+- **Desktop:** WASD, mouse look, left click fire, right click aim, Shift sprint, R reload, Q swap, G grenade, C crouch, F artillery, P pause.
 
-## How it plays
-- Five missions plus an endless last stand. Each mission unlocks the next.
-- Bullets drop over distance and drift in the wind. Use the numbered holdover marks under the crosshair. The range readout tells you how many mils to hold.
-- **Recruit** shows a red dot where your round will land and arrows that point to enemies. **Veteran** has neither.
-
-## Realism
-- .303 ballistics: 744 m/s muzzle velocity, air drag, 100 m zero, and wind drift based on lag time
-- Hit zones: head and chest kill. Gut and leg hits wound, and wounded men crawl, bleed out, or can be finished.
-- Every shot raises your exposure (Concealed, Suspected, Spotted), which makes enemy fire more accurate
-- Slow-motion kill cam on long lethal shots (can be switched off)
+## Also in this repo
+`sniper.html` is the earlier 2D sniper version of the game.
