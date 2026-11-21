@@ -10,7 +10,8 @@ Open `index.html` in any modern browser with an internet connection (three.js an
 ## The fight
 Hold a ruined Normandy street against waves of enemy infantry. They advance from the far end and two side alleys, move from cover to cover, pop up to fire, rush you with submachine guns, lob grenades, and take rooftop positions.
 
-- Weapons: M1 Garand (semi-auto, 8 rounds, the clip pings out when empty) and M1A1 Thompson (automatic, 30 rounds), plus grenades
+- Weapons: M1 Garand (semi-auto, 8 rounds, the clip pings out when empty), M1A1 Thompson (automatic, 30 rounds) and M1903A4 sniper rifle (bolt-action, full scope with hold breath), plus grenades
+- Aiming: clear iron-sight and scope pictures, look speed that slows as you zoom, and gentle aim assist on touch (Recruit and Regular)
 - Aim down iron sights, with a crosshair that spreads as you move, hit markers, kill popups and a kill feed
 - Health comes back if you stay out of fire; the screen bleeds red when you're hurt; red arcs show where shots came from
 - Six kills in a row earns an artillery strike
